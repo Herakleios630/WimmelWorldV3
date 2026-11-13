@@ -1,0 +1,7 @@
+# G0.5-Spike: Rohdaten und Build-Artefakte bleiben lokal.
+.godot/
+bench/results/*
+!bench/results/.gitkeep
+bench/native/bin/
+bench/native/obj/
+*.tmp
