@@ -51,6 +51,8 @@ static func _test_energy_sleep(ctx: G1aTestContext) -> void:
 		"A1 ist um 06:01 noch am Schlafen")
 	ctx.check(NeedsModel.value_at(sim.store, row, sim.clock.now,
 		NeedsModel.NEED_ENERGY, sim.config) >= 90.0, "Energie nach Nachtschlaf zu niedrig")
+	ctx.check_eq(G1aTestUtil.count_events(sim, SimEvent.T_NAP_START), 0,
+		"Routine-Tag erzeugt unerwartetes Nickerchen")
 
 
 static func _test_social(ctx: G1aTestContext) -> void:

@@ -1,6 +1,6 @@
 # G1a — Test- und Demoanleitung
 
-Status: G1a bestanden (Review 2026-11-13); Commit folgt  
+Status: G1a und G1a.1 bestanden (2026-11-13); Commit folgt  
 Siehe auch: `v3-g1a-report.md`
 
 ## Voraussetzungen
@@ -42,7 +42,7 @@ Erwartung:
 
 Erwartung:
 
-- 29/29 Test-IDs `PASS`
+- 29/29 Test-IDs `PASS`, 224 Checks
 - `G1A_SUITE results=29 passed=29 failed=0`
 - `G1A_SUITE_OK`, Exitcode 0
 
@@ -100,9 +100,10 @@ Erwartung: `SPIKE_UNIT_OK`.
 Dateien nach einem Lauf:
 
 - `g1a_visual_result.json` — Frame-/Draw-Call-/Sim-Tages-Messung
-- `g1a_visual_final.log`
-- `g1a_suite_final.log`
-- `g1a_demo.png` — visueller Smoke
+- `g1a_visual_calibrated.log`
+- `g1a_suite_calibrated.log`
+- `g1a_demo.png` — visueller Smoke (Tag)
+- `g1a_demo_night.png` — Tag/Nacht-Smoke
 
 ## 8. Hinweise
 
@@ -110,5 +111,13 @@ Dateien nach einem Lauf:
   gelten: T-UI-04/T-BENCH-02 würden dann sichtbar fehlschlagen.
 - Headless-Frame-Zeiten sind keine gültige FPS-Messung (Dummy-Renderer); die
   visuelle Messung ist separat.
+- G1a.1-Kalibrierung: `energy_per_16h_awake` ist 60 statt 100. Im
+  Seed-1337-Tag gibt es dadurch kein Routine-Nickerchen und 30/30 Mahlzeiten;
+  die Grain-Bilanz endet bei 58. Die Spec-Tabelle bleibt unverändert, die Rate
+  ist ein Kalibrierungsparameter (G1-Spec §5/§14).
+- Saves aus der 100/16 h-Kalibrierung werden über den Config-Hash abgelehnt.
+- Feldlabels zeigen kurze Namen plus ID (`Ar1`, `Cl3`, …); der selektierte
+  Agent zeigt seinen vollen Namen. Nicht-selektierte Agenten werden nicht auf
+  einen einzelnen Aktivitätsbuchstaben wie `A` gekürzt.
 - G1a enthält bewusst keine G1b-/G2-Features. Details und Kalibriergrenzen
   stehen im Bericht.

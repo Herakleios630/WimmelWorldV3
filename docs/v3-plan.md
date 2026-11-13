@@ -1,6 +1,6 @@
 # WimmelWorld V3 — Planung
 
-Status: G1a bestanden (2026-11-13); G1b bereit, Freigabe offen  
+Status: G1a.1 bestanden (2026-11-13); G1b bereit, Freigabe offen  
 Stand: 2026-11-13  
 Arbeitsmodus: **Nur Analyse und Planung. Kein Code, keine Implementierung, keine Änderung an V1/V2.**
 

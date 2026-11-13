@@ -1,7 +1,7 @@
 # WimmelWorld V3
 
-Status: **G1a bestanden (Review 2026-11-13); G1b bereit, Freigabe offen.**  
-G0.5 und G1a sind abgeschlossen; G1b ist der nächste Gate.
+Status: **G1a.1 bestanden (2026-11-13); G1b bereit, Freigabe offen.**  
+G0.5 und G1a/G1a.1 sind abgeschlossen; G1b ist der nächste Gate.
 
 ## Was V3 ist
 

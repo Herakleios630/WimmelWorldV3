@@ -37,8 +37,11 @@ var start_energy: float = 80.0
 var start_social: float = 70.0
 
 # Raten pro Sim-Tag bzw. Wach-/Schlafenszeit (G1-Spec §5).
+# G1a.1-Kalibrierung: 60 statt 100 pro 16 h. Start 80 und Schwelle 20 ergeben
+# den Schwellenwert damit erst nach 16 h (22:00), also nach der Routine-
+# Schlafenszeit (20:30/21:00). Kein Nachmittags-Nap verdrängt das Abendessen.
 var hunger_per_day: float = 100.0
-var energy_per_16h_awake: float = 100.0
+var energy_per_16h_awake: float = 60.0
 var energy_per_8h_sleep: float = 80.0
 var social_per_day: float = 50.0
 

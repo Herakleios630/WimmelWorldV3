@@ -157,9 +157,19 @@ func _draw_trees() -> void:
 	for p in sim.world.decor_trees:
 		var px: Vector2 = p * TILE_PX
 		draw_rect(Rect2(px + Vector2(-2, -2), Vector2(4, 8)), Color(0.35, 0.24, 0.14))
-		draw_circle(px + Vector2(0, -6), 7.0, Color(0.22, 0.42, 0.20))
-		draw_circle(px + Vector2(-4, -2), 5.0, Color(0.26, 0.48, 0.24))
-		draw_circle(px + Vector2(4, -2), 5.0, Color(0.26, 0.48, 0.24))
+		draw_circle(px + Vector2(0, -6), 8.0, Color(0.22, 0.42, 0.20))
+		draw_circle(px + Vector2(3, -9), 4.5, Color(0.26, 0.48, 0.24))
+
+
+## Kurzes, lesbares Feldlabel: zwei Namensbuchstaben plus stabile ID
+## ("Ar1", "Cl3"). Selektierte Agenten zeigen den vollen Namen. Nie auf einen
+## einzelnen Aktivitätsbuchstaben wie "A" verkürzt.
+static func field_label(rec: AgentRecord, agent_id: int, selected: bool = false) -> String:
+	if rec == null:
+		return "A%d" % agent_id
+	if selected:
+		return "%s %d" % [rec.name, agent_id]
+	return "%s%d" % [rec.name.substr(0, 2), agent_id]
 
 
 func _draw_agents() -> void:
@@ -177,22 +187,35 @@ func _draw_agents() -> void:
 		draw_rect(Rect2(pos + Vector2(-4, -8), Vector2(8, 12)), color.darkened(0.18))
 		draw_circle(pos + Vector2(0, -11), 4.2, color.lightened(0.12))
 		draw_arc(pos + Vector2(0, -11), 4.2, 0.0, TAU, 12, Color(0.20, 0.14, 0.10), 1.0)
-		# Aktivitätsmarker
+		# Aktivitätsmarker (kurz, aber nicht mit dem Agentenlabel verwechselbar).
 		var marker: String = ""
 		match act:
 			AgentStore.ACT_SLEEP: marker = "z"
-			AgentStore.ACT_WORK: marker = "A"
-			AgentStore.ACT_EAT: marker = "E"
+			AgentStore.ACT_WORK: marker = "Ar"
+			AgentStore.ACT_EAT: marker = "Es"
 			AgentStore.ACT_TRAVEL: marker = ">"
-			AgentStore.ACT_SOCIAL: marker = "S"
-			AgentStore.ACT_LEARN: marker = "L"
-			AgentStore.ACT_PLAY: marker = "P"
+			AgentStore.ACT_SOCIAL: marker = "So"
+			AgentStore.ACT_LEARN: marker = "Le"
+			AgentStore.ACT_PLAY: marker = "Sp"
 		if marker != "":
-			draw_string(_font, pos + Vector2(6, -18), marker,
-				HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 1, 1, 0.8))
-		if view_state != null and view_state.selected_agent_id == sim.store.ids[row]:
+			draw_string(_font, pos + Vector2(7, -5), marker,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1, 1, 1, 0.78))
+		var rec: AgentRecord = AgentRecords.record_by_id(sim.records, sim.store.ids[row])
+		var selected: bool = view_state != null \
+			and view_state.selected_agent_id == sim.store.ids[row]
+		var label: String = field_label(rec, sim.store.ids[row], selected)
+		var label_size: int = 11 if selected else 10
+		var label_color: Color = Color(1.0, 0.95, 0.7) if selected else Color(1, 1, 1, 0.92)
+		var label_width: float = _font.get_string_size(label,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x
+		# Nachbarn im selben Haus/Werkstatt-Cluster liegen teils nur 1,2-1,4
+		# Tiles auseinander; gestaffelte Label-Höhen halten die kurzen Labels
+		# lesbar (maximal drei Stufen pro Cluster).
+		var label_y: float = -22.0 - float(row % 3) * 11.0
+		var label_pos: Vector2 = pos + Vector2(-label_width * 0.5, label_y)
+		draw_string(_font, label_pos + Vector2(1, 1), label,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, label_size, Color(0.05, 0.04, 0.03, 0.65))
+		draw_string(_font, label_pos, label,
+			HORIZONTAL_ALIGNMENT_LEFT, -1, label_size, label_color)
+		if selected:
 			draw_arc(pos, 15.0, 0.0, TAU, 24, Color(1.0, 0.92, 0.35), 2.0)
-			var rec: AgentRecord = AgentRecords.record_by_id(sim.records, sim.store.ids[row])
-			if rec != null:
-				draw_string(_font, pos + Vector2(-20, -26), rec.name,
-					HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1.0, 0.95, 0.7))

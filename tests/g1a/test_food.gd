@@ -18,10 +18,16 @@ static func _test_daily_work(ctx: G1aTestContext) -> void:
 	sim.advance_to(G1aTestUtil.abs_time(0, 12, 31))
 	ctx.check_eq(sim.meals_served, 20, "Mittagsmahlzeiten nicht serviert")
 	ctx.check_eq(sim.grain, 60 - 20 + 12, "Grain-Bestand nach Mittag")
-	sim.advance_to(G1aTestUtil.abs_time(0, 16, 0))
-	# Nachmittagsarbeit bis zum Energie-Nickerchen: weitere 3 h je Feldarbeiter.
-	ctx.check_eq(sim.grain_produced, 24, "Tages-Grain nach Nachmittagsarbeit")
-	ctx.check_eq(sim.grain, 60 - 20 + 24, "Tages-Grain-Bestand")
+	sim.advance_to(G1aTestUtil.abs_time(0, 17, 30))
+	# Nachmittagsarbeit läuft ohne Energie-Nickerchen bis 17:00. Vier
+	# Feldarbeiter tragen Restsekunden und liefern je 4 volle Stunden.
+	ctx.check_eq(sim.grain_produced, 28, "Tages-Grain nach Nachmittagsarbeit")
+	ctx.check_eq(sim.meals_served, 20, "Abendessen vor 18:00 serviert")
+	ctx.check_eq(sim.grain, 60 - 20 + 28, "Grain-Bestand nach Nachmittagsarbeit")
+	sim.advance_to(G1aTestUtil.abs_time(0, 18, 31))
+	ctx.check_eq(sim.meals_served, 30, "Abendessen nicht vollständig serviert")
+	ctx.check_eq(sim.meals_skipped, 0, "Mahlzeit ohne Knappheit übersprungen")
+	ctx.check_eq(sim.grain, 60 - 30 + 28, "Tages-Grain-Bestand")
 
 
 static func _test_meal(ctx: G1aTestContext) -> void:

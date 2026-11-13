@@ -21,6 +21,14 @@ static func _test_inspector(ctx: G1aTestContext) -> void:
 			"position", "next_event"]:
 		ctx.check(info.has(key), "Inspector-Feld fehlt: " + key)
 	ctx.check_eq(info.get("name", ""), "Arnd", "Inspector-Name")
+	# Feldlabel: kurzer Name plus ID, nicht auf einen Aktivitätsbuchstaben
+	# wie "A" gekürzt. Selektiert zeigt den vollen Namen.
+	var label_rec: AgentRecord = AgentRecords.record_by_id(sim.records, 1)
+	var field_label: String = WorldView.field_label(label_rec, 1, false)
+	var selected_label: String = WorldView.field_label(label_rec, 1, true)
+	ctx.check_eq(field_label, "Ar1", "Feldlabel nicht lesbar")
+	ctx.check_eq(selected_label, "Arnd 1", "Selektiertes Feldlabel nicht lesbar")
+	ctx.check(field_label != "A", "Feldlabel auf 'A' gekürzt")
 	ctx.check(str(info.get("home_name", "")) != "", "Home-Name leer")
 	ctx.check(str(info.get("job_name", "")) != "", "Job-Name leer")
 	for need_key in ["hunger", "energy", "social"]:
