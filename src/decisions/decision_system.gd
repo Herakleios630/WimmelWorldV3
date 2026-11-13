@@ -19,6 +19,8 @@ const SOURCE_NEED: int = 1
 const NEED_HUNGER: int = 0
 const NEED_ENERGY: int = 1
 const NEED_SOCIAL: int = 2
+const NEED_HYGIENE: int = 3
+const NEED_FUN: int = 4
 
 const NEAR_DISTANCE: float = 0.6
 const MAX_NAP_S: int = 6 * 3600
@@ -107,7 +109,12 @@ func on_agent_wake(row: int) -> void:
 				_finish_work(row, now)
 				_start_need_action(row, now, need_w)
 			break
-		if act == AgentStore.ACT_LEARN or act == AgentStore.ACT_PLAY:
+		if act == AgentStore.ACT_HYGIENE:
+			if now >= store.action_end[row]:
+				_finish_hygiene(row, now)
+				continue
+			break
+		if act == AgentStore.ACT_LEARN:
 			if now >= store.action_end[row]:
 				store.activity[row] = AgentStore.ACT_IDLE
 				continue
@@ -115,6 +122,15 @@ func on_agent_wake(row: int) -> void:
 			if need_l >= 0:
 				store.activity[row] = AgentStore.ACT_IDLE
 				_start_need_action(row, now, need_l)
+			break
+		if act == AgentStore.ACT_PLAY:
+			if now >= store.action_end[row]:
+				_finish_play(row, now)
+				continue
+			var need_p: int = _need_urgency(row, now)
+			if need_p >= 0:
+				store.activity[row] = AgentStore.ACT_IDLE
+				_start_need_action(row, now, need_p)
 			break
 		# IDLE
 		var need_i: int = _need_urgency(row, now)
@@ -139,6 +155,8 @@ func schedule_next(row: int, now: int) -> void:
 		best = store.action_end[row]
 	elif act == AgentStore.ACT_SLEEP:
 		best = store.action_end[row]
+	elif act == AgentStore.ACT_HYGIENE:
+		best = store.action_end[row]
 	elif act == AgentStore.ACT_LEARN or act == AgentStore.ACT_PLAY:
 		best = store.action_end[row]
 	else:
@@ -154,6 +172,12 @@ func schedule_next(row: int, now: int) -> void:
 		var t_s: int = _need_wake_time(row, now, NEED_SOCIAL)
 		if t_s > 0 and t_s < best:
 			best = t_s
+		var t_hy: int = _need_wake_time(row, now, NEED_HYGIENE)
+		if t_hy > 0 and t_hy < best:
+			best = t_hy
+		var t_f: int = _need_wake_time(row, now, NEED_FUN)
+		if t_f > 0 and t_f < best:
+			best = t_f
 	if best <= now:
 		best = now + SimConfig.MIN_WAKE_S
 	store.wake_gen[row] = (store.wake_gen[row] + 1) & 0x7FFFFFFF
@@ -170,6 +194,10 @@ func _need_value(row: int, need: int) -> float:
 			return store.energy[row]
 		NEED_SOCIAL:
 			return store.social[row]
+		NEED_HYGIENE:
+			return store.hygiene[row]
+		NEED_FUN:
+			return store.fun[row]
 	return 0.0
 
 
@@ -214,11 +242,37 @@ func _social_suppressed(row: int, now: int) -> bool:
 	return false
 
 
+func _hygiene_suppressed(row: int, now: int) -> bool:
+	return store.activity[row] == AgentStore.ACT_HYGIENE
+
+
+func _fun_suppressed(row: int, now: int) -> bool:
+	if store.activity[row] == AgentStore.ACT_PLAY \
+			or store.activity[row] == AgentStore.ACT_SOCIAL:
+		return true
+	if _routine_activity(row, now) == AgentStore.ACT_PLAY \
+			or _routine_activity(row, now) == AgentStore.ACT_SOCIAL:
+		return true
+	var next_play: int = RoleSchedule.seconds_until_next_activity(now,
+		store.role[row], AgentStore.ACT_PLAY)
+	var next_social: int = RoleSchedule.seconds_until_next_activity(now,
+		store.role[row], AgentStore.ACT_SOCIAL)
+	if next_play >= 0 and next_play <= SimConfig.ROUTINE_LOOKAHEAD_S:
+		return true
+	if next_social >= 0 and next_social <= SimConfig.ROUTINE_LOOKAHEAD_S:
+		return true
+	return false
+
+
 func _need_urgency(row: int, now: int) -> int:
 	if store.hunger[row] >= config.hunger_threshold and not _hunger_suppressed(row, now):
 		return NEED_HUNGER
 	if store.energy[row] <= config.energy_threshold and not _energy_suppressed(row, now):
 		return NEED_ENERGY
+	if store.hygiene[row] <= config.hygiene_threshold and not _hygiene_suppressed(row, now):
+		return NEED_HYGIENE
+	if store.fun[row] <= config.fun_threshold and not _fun_suppressed(row, now):
+		return NEED_FUN
 	if store.social[row] <= config.social_threshold and not _social_suppressed(row, now):
 		return NEED_SOCIAL
 	return -1
@@ -260,6 +314,20 @@ func _need_wake_time(row: int, now: int, need: int) -> int:
 				return now
 			var dts: int = NeedsModel.seconds_to_threshold(store, row, now, need, config)
 			return -1 if dts < 0 else now + dts
+		NEED_HYGIENE:
+			if value <= config.hygiene_threshold:
+				if _hygiene_suppressed(row, now):
+					return -1
+				return now
+			var dth: int = NeedsModel.seconds_to_threshold(store, row, now, need, config)
+			return -1 if dth < 0 else now + dth
+		NEED_FUN:
+			if value <= config.fun_threshold:
+				if _fun_suppressed(row, now):
+					return -1
+				return now
+			var dtf: int = NeedsModel.seconds_to_threshold(store, row, now, need, config)
+			return -1 if dtf < 0 else now + dtf
 	return -1
 
 
@@ -286,6 +354,11 @@ func _plaza_point(row: int) -> Vector2:
 	var dx: float = float((row % 5) - 2) * 1.0
 	var dy: float = float((row / 5) % 2) * 1.5
 	return world.clamp_point(world.plaza_point + Vector2(dx, dy))
+
+
+func _well_point(row: int) -> Vector2:
+	var base: Vector2 = world.door_point(WorldMap.B_WELL)
+	return world.clamp_point(base + Vector2(float((row % 3) - 1) * 0.8, 0.0))
 
 
 func _resolve_place(row: int, place: int) -> Array:
@@ -410,6 +483,8 @@ func _begin_action(row: int, act: int, now: int, end_time: int, source: int) -> 
 	if act == AgentStore.ACT_WORK:
 		store.work_start[row] = now
 		store.work_end[row] = end_time
+		if store.job_kind[row] == AgentStore.JOB_FIELD:
+			_field_on_work_start()
 		_host().log_event(SimEvent.T_WORK_START, SimEvent.IMPORTANCE_ROUTINE,
 			agent_id, "work_start", "Arbeit beginnt", store.target_building_id[row])
 	elif act == AgentStore.ACT_EAT:
@@ -425,6 +500,9 @@ func _begin_action(row: int, act: int, now: int, end_time: int, source: int) -> 
 	elif act == AgentStore.ACT_SOCIAL:
 		_host().log_event(SimEvent.T_SOCIAL_START, SimEvent.IMPORTANCE_ROUTINE,
 			agent_id, "social_start", "Sozialisieren", source)
+	elif act == AgentStore.ACT_HYGIENE:
+		_host().log_event(SimEvent.T_ACTIVITY_START, SimEvent.IMPORTANCE_ROUTINE,
+			agent_id, "activity_start", "Waschen", act)
 	elif act == AgentStore.ACT_LEARN or act == AgentStore.ACT_PLAY:
 		_host().log_event(SimEvent.T_ACTIVITY_START, SimEvent.IMPORTANCE_ROUTINE,
 			agent_id, "activity_start", AgentStore.activity_name(act), act)
@@ -434,19 +512,14 @@ func _finish_work(row: int, now: int) -> void:
 	if store.work_start[row] >= 0:
 		var worked: int = now - store.work_start[row]
 		if worked > 0:
-			store.work_accum[row] += worked
+			if store.job_kind[row] == AgentStore.JOB_FIELD:
+				_field_add_work(worked)
+			else:
+				store.work_accum[row] += worked
 		store.work_start[row] = -1
-	var hours: int = int(store.work_accum[row] / 3600)
-	if hours > 0:
-		store.work_accum[row] -= hours * 3600
-		if store.job_kind[row] == AgentStore.JOB_FIELD:
-			var grain_added: int = hours * SimConfig.GRAIN_PER_FIELD_HOUR
-			_host().grain += grain_added
-			_host().grain_produced += grain_added
-			_host().log_event(SimEvent.T_WORK_END, SimEvent.IMPORTANCE_NOTABLE,
-				_agent_id(row), "work_end", "Feldarbeit", grain_added)
-			_host().log_event(SimEvent.T_GRAIN_AWARD, SimEvent.IMPORTANCE_ROUTINE,
-				_agent_id(row), "grain_award", "Grain eingelagert", grain_added)
+	var field_stage: int = _field_stage()
+	_host().log_event(SimEvent.T_WORK_END, SimEvent.IMPORTANCE_NOTABLE,
+		_agent_id(row), "work_end", "Arbeit beendet", field_stage)
 	store.work_end[row] = -1
 	store.activity[row] = AgentStore.ACT_IDLE
 
@@ -455,12 +528,14 @@ func _finish_meal(row: int, now: int) -> void:
 	if _host().grain >= SimConfig.MEAL_GRAIN_COST:
 		_host().grain -= SimConfig.MEAL_GRAIN_COST
 		_host().meals_served += 1
+		_host().year_meals_served += 1
 		NeedsModel.apply_meal(store, row, config)
 		store.meal_retry[row] = 0
 		_host().log_event(SimEvent.T_MEAL_END, SimEvent.IMPORTANCE_ROUTINE,
 			_agent_id(row), "meal_end", "Mahlzeit beendet", _host().grain)
 	else:
 		_host().meals_skipped += 1
+		_host().year_meals_skipped += 1
 		store.meal_retry[row] = now + SimConfig.SHORTAGE_RETRY_S
 		_host().log_event(SimEvent.T_MEAL_SKIPPED, SimEvent.IMPORTANCE_NOTABLE,
 			_agent_id(row), "meal_skipped", "kein Grain", _host().grain)
@@ -476,6 +551,20 @@ func _finish_social(row: int, now: int) -> void:
 	NeedsModel.apply_social(store, row, config)
 	_host().log_event(SimEvent.T_SOCIAL_END, SimEvent.IMPORTANCE_ROUTINE,
 		_agent_id(row), "social_end", "Sozialisieren beendet", int(round(store.social[row])))
+	store.activity[row] = AgentStore.ACT_IDLE
+
+
+func _finish_play(row: int, now: int) -> void:
+	NeedsModel.apply_fun(store, row, config)
+	_host().log_event(SimEvent.T_ACTIVITY_END, SimEvent.IMPORTANCE_ROUTINE,
+		_agent_id(row), "activity_end", "Spielen beendet", AgentStore.ACT_PLAY)
+	store.activity[row] = AgentStore.ACT_IDLE
+
+
+func _finish_hygiene(row: int, now: int) -> void:
+	NeedsModel.apply_hygiene(store, row, config)
+	_host().log_event(SimEvent.T_ACTIVITY_END, SimEvent.IMPORTANCE_ROUTINE,
+		_agent_id(row), "activity_end", "Waschen beendet", AgentStore.ACT_HYGIENE)
 	store.activity[row] = AgentStore.ACT_IDLE
 
 
@@ -527,6 +616,28 @@ func _start_need_action(row: int, now: int, need: int) -> void:
 		else:
 			_start_travel(row, AgentStore.ACT_SOCIAL, WorldMap.B_WELL, plaza,
 				SOURCE_NEED, -1, SimConfig.SOCIAL_DURATION_S)
+	elif need == NEED_HYGIENE:
+		var well: Vector2 = _well_point(row)
+		store.target_building_id[row] = WorldMap.B_WELL
+		store.target_x[row] = well.x
+		store.target_y[row] = well.y
+		if Vector2(store.pos_x[row], store.pos_y[row]).distance_to(well) <= NEAR_DISTANCE:
+			_begin_action(row, AgentStore.ACT_HYGIENE, now,
+				now + SimConfig.HYGIENE_DURATION_S, SOURCE_NEED)
+		else:
+			_start_travel(row, AgentStore.ACT_HYGIENE, WorldMap.B_WELL, well,
+				SOURCE_NEED, -1, SimConfig.HYGIENE_DURATION_S)
+	elif need == NEED_FUN:
+		var leisure: Vector2 = _plaza_point(row)
+		store.target_building_id[row] = WorldMap.B_WELL
+		store.target_x[row] = leisure.x
+		store.target_y[row] = leisure.y
+		if Vector2(store.pos_x[row], store.pos_y[row]).distance_to(leisure) <= NEAR_DISTANCE:
+			_begin_action(row, AgentStore.ACT_PLAY, now,
+				now + SimConfig.FUN_DURATION_S, SOURCE_NEED)
+		else:
+			_start_travel(row, AgentStore.ACT_PLAY, WorldMap.B_WELL, leisure,
+				SOURCE_NEED, -1, SimConfig.FUN_DURATION_S)
 
 
 func _nap_duration(row: int) -> int:
@@ -534,6 +645,101 @@ func _nap_duration(row: int) -> int:
 	var sleep_rate: float = config.energy_per_8h_sleep / (8.0 * 3600.0)
 	var seconds: int = int(ceil(missing / sleep_rate))
 	return clampi(seconds, 1800, MAX_NAP_S)
+
+
+func _field() -> Building:
+	return world.building_by_id(WorldMap.B_FIELD)
+
+
+func _field_stage() -> int:
+	var field: Building = _field()
+	return field.field_stage if field != null else -1
+
+
+func _field_set_stage(field: Building, stage: int) -> void:
+	field.field_stage = stage
+	_host().log_event(SimEvent.T_FIELD_STAGE, SimEvent.IMPORTANCE_NOTABLE,
+		0, "field_stage", Building.field_stage_name(stage), stage)
+
+
+## Beim Arbeitsbeginn werden FALLOW/PLOWED/RIPE in den jeweiligen
+## Arbeitszustand überführt. Der Zustand ist damit sichtbar, bevor Fortschritt
+## entsteht; es gibt keinen Instant-Abschluss.
+func _field_on_work_start() -> void:
+	var field: Building = _field()
+	if field == null:
+		return
+	match field.field_stage:
+		Building.FIELD_FALLOW:
+			_field_set_stage(field, Building.FIELD_PLOWING)
+		Building.FIELD_PLOWED:
+			_field_set_stage(field, Building.FIELD_SOWING)
+		Building.FIELD_RIPE:
+			_field_set_stage(field, Building.FIELD_HARVESTING)
+
+
+func _field_add_work(seconds: int) -> void:
+	var field: Building = _field()
+	if field == null or seconds <= 0:
+		return
+	var required: int = 0
+	match field.field_stage:
+		Building.FIELD_PLOWING:
+			required = config.field_plow_work_s
+		Building.FIELD_SOWING:
+			required = config.field_sow_work_s
+		Building.FIELD_HARVESTING:
+			required = config.field_harvest_work_s
+	if required <= 0:
+		return
+	field.field_work_s += seconds
+	if field.field_work_s < required:
+		return
+	# Restsekunden einer Arbeitssitzung werden nicht in die Folgestufe
+	# übertragen. Jede Stufe braucht eigene Arbeit; kein Instant-Kettenlauf.
+	field.field_work_s = 0
+	match field.field_stage:
+		Building.FIELD_PLOWING:
+			_field_set_stage(field, Building.FIELD_PLOWED)
+		Building.FIELD_SOWING:
+			_field_set_stage(field, Building.FIELD_SOWN)
+			var host = _host()
+			host.log_event(SimEvent.T_FIELD_SOWN, SimEvent.IMPORTANCE_NOTABLE,
+				0, "field_sown", "Aussaat abgeschlossen",
+				_now() + config.field_grow_s)
+			_field_set_stage(field, Building.FIELD_GROWING)
+			field.field_growth_end = _now() + config.field_grow_s
+			field.field_growth_gen += 1
+			scheduler.push(field.field_growth_end, SimKinds.EVENT_FIELD_TICK,
+				field.field_growth_gen)
+		Building.FIELD_HARVESTING:
+			var yield_grain: int = config.field_harvest_yield
+			var host_h = _host()
+			host_h.grain += yield_grain
+			host_h.grain_produced += yield_grain
+			host_h.grain_harvested += yield_grain
+			host_h.harvests_completed += 1
+			host_h.field_cycles_completed += 1
+			host_h.year_grain_produced += yield_grain
+			host_h.year_harvests += 1
+			host_h.log_event(SimEvent.T_FIELD_HARVEST, SimEvent.IMPORTANCE_MAJOR,
+				0, "field_harvest", "Ernte eingelagert", yield_grain)
+			_field_set_stage(field, Building.FIELD_FALLOW)
+
+
+func on_field_tick(gen: int) -> void:
+	var field: Building = _field()
+	if field == null:
+		return
+	if field.field_stage != Building.FIELD_GROWING:
+		return
+	if gen != field.field_growth_gen:
+		return
+	if _now() < field.field_growth_end:
+		return
+	_field_set_stage(field, Building.FIELD_RIPE)
+	_host().log_event(SimEvent.T_FIELD_RIPE, SimEvent.IMPORTANCE_NOTABLE,
+		0, "field_ripe", "Feld ist reif", field.field_growth_end)
 
 
 ## Position zur Sim-Zeit t. Reine Geometrie, keine Frame-Abhängigkeit.

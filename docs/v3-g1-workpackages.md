@@ -57,7 +57,7 @@ definiert; in G1 sind sie nur eine Abhängigkeit, kein G1-Abnahmepunkt.
 | T-MOVE-01 | `position_at` | Position zur Zeit exakt, keine Frame-Abhängigkeit |
 | T-MOVE-02 | Ankunft | Ankunfts-Event exakt zum Termin |
 | T-MOVE-03 | Waypoint | Kein A*-/Cache-Zwang in G1a |
-| T-FOOD-01 | Tägliche Arbeit | Grain-Zuwachs pro Arbeitstag korrekt |
+| T-FOOD-01 | Feldarbeit/Fortschritt | Feldarbeit trägt Stufenfortschritt; Ernte erzeugt Grain (G1b-Schritt 1) |
 | T-FOOD-02 | Mahlzeit | Grain-Verbrauch und Hunger-Reset korrekt |
 | T-FOOD-03 | Knappheit | Kein stilles Auffüllen; Hunger/Health reagieren |
 | T-SAVE-01 | Save/Load vor Entscheidung | Exakter weiterer Verlauf |
@@ -69,6 +69,10 @@ definiert; in G1 sind sie nur eine Abhängigkeit, kein G1-Abnahmepunkt.
 | T-UI-04 | 60 FPS | 10 Agenten@50x, Gesamtframe p95 ≤ 16 ms |
 | T-BENCH-01 | 3 Läufe | Alle drei G1a-Läufe bestehen |
 | T-BENCH-02 | Headless/visuell | Beide Messungen dokumentiert |
+
+**Hinweis:** G1b-Schritt 1 ersetzt die tägliche Grain-Erzeugung durch den
+vollen Feldzyklus. T-FOOD-01/03 prüfen jetzt Fortschritt/Ernte/Knappheit; die
+historische G1a-Abnahme bleibt dokumentiert.
 
 ### G1b
 

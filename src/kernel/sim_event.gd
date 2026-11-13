@@ -30,6 +30,12 @@ const T_NAP_START: int = 18
 const T_NAP_END: int = 19
 const T_GRAIN_AWARD: int = 20
 const T_ACTIVITY_START: int = 21
+const T_FIELD_STAGE: int = 22
+const T_FIELD_SOWN: int = 23
+const T_FIELD_RIPE: int = 24
+const T_FIELD_HARVEST: int = 25
+const T_YEAR_SUMMARY: int = 26
+const T_ACTIVITY_END: int = 27
 
 var id: int = 0
 var time: int = 0
@@ -77,6 +83,12 @@ static func type_name(t: int) -> String:
 		T_NAP_END: return "nap_end"
 		T_GRAIN_AWARD: return "grain_award"
 		T_ACTIVITY_START: return "activity_start"
+		T_FIELD_STAGE: return "field_stage"
+		T_FIELD_SOWN: return "field_sown"
+		T_FIELD_RIPE: return "field_ripe"
+		T_FIELD_HARVEST: return "field_harvest"
+		T_YEAR_SUMMARY: return "year_summary"
+		T_ACTIVITY_END: return "activity_end"
 		_: return "unknown"
 
 

@@ -26,8 +26,27 @@ var relationships: Array = []
 
 var grain: int = 0
 var grain_produced: int = 0
+var grain_harvested: int = 0
 var meals_served: int = 0
 var meals_skipped: int = 0
+var harvests_completed: int = 0
+var field_cycles_completed: int = 0
+
+# Jahresbilanz (30-Tage-Jahr). year_* laufen, last_year_* ist der letzte
+# abgeschlossene Jahresabschluss.
+var year_index: int = 0
+var year_start_grain: int = 0
+var year_grain_produced: int = 0
+var year_meals_served: int = 0
+var year_meals_skipped: int = 0
+var year_harvests: int = 0
+var last_year_index: int = -1
+var last_year_start_grain: int = 0
+var last_year_grain_produced: int = 0
+var last_year_meals_served: int = 0
+var last_year_meals_skipped: int = 0
+var last_year_harvests: int = 0
+var last_year_end_grain: int = 0
 
 
 static func create(p_config: SimConfig = null) -> Simulation:
@@ -51,11 +70,27 @@ func setup_new(p_config: SimConfig) -> void:
 	relationships = AgentRecords.default_relationships()
 	grain = config.start_grain
 	grain_produced = 0
+	grain_harvested = 0
 	meals_served = 0
 	meals_skipped = 0
+	harvests_completed = 0
+	field_cycles_completed = 0
+	year_index = 0
+	year_start_grain = config.start_grain
+	year_grain_produced = 0
+	year_meals_served = 0
+	year_meals_skipped = 0
+	year_harvests = 0
+	last_year_index = -1
+	last_year_start_grain = 0
+	last_year_grain_produced = 0
+	last_year_meals_served = 0
+	last_year_meals_skipped = 0
+	last_year_harvests = 0
+	last_year_end_grain = 0
 	_spawn_initial_agents()
 	logs.emit(clock.now, SimEvent.T_SIM_START, SimEvent.IMPORTANCE_NOTABLE,
-		0, "sim_start", "G1a gestartet", config.seed)
+		0, "sim_start", "G1b gestartet", config.seed)
 	logs.emit(clock.now, SimEvent.T_DAY_START, SimEvent.IMPORTANCE_ROUTINE,
 		0, "day_start", "Tag beginnt", clock.day_index())
 	for row in store.count:
@@ -72,7 +107,8 @@ func _spawn_initial_agents() -> void:
 			rec.home_building_id, rec.job_id, rec.job_kind,
 			home_point.x, home_point.y,
 			config.start_hunger, config.start_energy, config.start_social,
-			clock.now)
+			clock.now, config.start_hygiene, config.start_fun,
+			config.start_health)
 
 
 func advance_to(target_time: int) -> int:
@@ -101,10 +137,35 @@ func _dispatch(kind: int, payload: int) -> void:
 		if row >= 0 and row < store.count and store.wake_gen[row] == gen:
 			decisions.on_agent_wake(row)
 	elif kind == SimKinds.EVENT_DAY_TICK:
+		var day: int = clock.day_index()
 		logs.emit(clock.now, SimEvent.T_DAY_START, SimEvent.IMPORTANCE_ROUTINE,
-			0, "day_start", "Tag beginnt", clock.day_index())
+			0, "day_start", "Tag beginnt", day)
+		if day > 0 and day % SimConfig.YEAR_DAYS == 0:
+			_complete_year()
 		var next_midnight: int = (clock.day_index() + 1) * SimConfig.TICKS_PER_DAY
 		scheduler.push(next_midnight, SimKinds.EVENT_DAY_TICK, 0)
+	elif kind == SimKinds.EVENT_FIELD_TICK:
+		decisions.on_field_tick(payload)
+
+
+func _complete_year() -> void:
+	last_year_index = year_index
+	last_year_start_grain = year_start_grain
+	last_year_grain_produced = year_grain_produced
+	last_year_meals_served = year_meals_served
+	last_year_meals_skipped = year_meals_skipped
+	last_year_harvests = year_harvests
+	last_year_end_grain = grain
+	log_event(SimEvent.T_YEAR_SUMMARY, SimEvent.IMPORTANCE_NOTABLE, 0,
+		"year_summary", "Jahr %d: Start %d + Ernte %d - Mahlzeiten %d = %d" % [
+			year_index + 1, year_start_grain, year_grain_produced,
+			year_meals_served, grain], grain)
+	year_index += 1
+	year_start_grain = grain
+	year_grain_produced = 0
+	year_meals_served = 0
+	year_meals_skipped = 0
+	year_harvests = 0
 
 
 func log_event(type: int, importance: int, agent_id: int, template_key: String,
@@ -151,8 +212,30 @@ func state_hash() -> int:
 	h = HashUtil.mix(h, routes.state_hash())
 	h = HashUtil.mix_i64(h, grain)
 	h = HashUtil.mix_i64(h, grain_produced)
+	h = HashUtil.mix_i64(h, grain_harvested)
 	h = HashUtil.mix_i64(h, meals_served)
 	h = HashUtil.mix_i64(h, meals_skipped)
+	h = HashUtil.mix_i64(h, harvests_completed)
+	h = HashUtil.mix_i64(h, field_cycles_completed)
+	var field: Building = world.building_by_id(WorldMap.B_FIELD)
+	if field != null:
+		h = HashUtil.mix(h, field.field_stage)
+		h = HashUtil.mix_i64(h, field.field_work_s)
+		h = HashUtil.mix_i64(h, field.field_growth_end)
+		h = HashUtil.mix(h, field.field_growth_gen)
+	h = HashUtil.mix_i64(h, year_index)
+	h = HashUtil.mix_i64(h, year_start_grain)
+	h = HashUtil.mix_i64(h, year_grain_produced)
+	h = HashUtil.mix_i64(h, year_meals_served)
+	h = HashUtil.mix_i64(h, year_meals_skipped)
+	h = HashUtil.mix_i64(h, year_harvests)
+	h = HashUtil.mix_i64(h, last_year_index)
+	h = HashUtil.mix_i64(h, last_year_start_grain)
+	h = HashUtil.mix_i64(h, last_year_grain_produced)
+	h = HashUtil.mix_i64(h, last_year_meals_served)
+	h = HashUtil.mix_i64(h, last_year_meals_skipped)
+	h = HashUtil.mix_i64(h, last_year_harvests)
+	h = HashUtil.mix_i64(h, last_year_end_grain)
 	for record in records:
 		h = HashUtil.mix(h, (record as AgentRecord).state_hash())
 	for household in households:

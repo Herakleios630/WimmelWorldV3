@@ -1,7 +1,7 @@
 # WimmelWorld V3
 
-Status: **G1a.1 bestanden (2026-11-13); G1b bereit, Freigabe offen.**  
-G0.5 und G1a/G1a.1 sind abgeschlossen; G1b ist der nächste Gate.
+Status: **G1b Schritt 1 bestanden; Schritt 2 (Lebenszyklus) bereit.**  
+G0.5, G1a, G1a.1 und G1b-Schritt 1 sind abgeschlossen; G1b läuft in drei Schritten.
 
 ## Was V3 ist
 
@@ -31,6 +31,8 @@ G0.5 und G1a/G1a.1 sind abgeschlossen; G1b ist der nächste Gate.
 | `docs/v3-g1-workpackages.md` | G1-Arbeitspakete und Test-IDs |
 | `docs/g1a/v3-g1a-report.md` | G1a-Implementierung, Tests, Messwerte, Review |
 | `docs/g1a/README.md` | G1a-Test- und Demoanleitung |
+| `docs/g1b/v3-g1b-step1-report.md` | G1b Schritt 1: Needs, Health, Feldzyklus |
+| `docs/g1b/README.md` | G1b-Schritt-1-Testanleitung |
 | `docs/v3-g0-review.md` | G0-Review-Checkliste und Freigabe |
 | `docs/reviews/v3-review-2026-11-13.md` | Externes Review und Konsequenzen |
 | `docs/reviews/v3-review-prompt.md` | Prompt für die erste externe Review |

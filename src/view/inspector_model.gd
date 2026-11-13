@@ -2,7 +2,8 @@ class_name InspectorModel
 extends RefCounted
 
 ## Read-only View-Model für den Inspector. Liest Simulation, schreibt nie.
-## G1a zeigt Hunger/Energie/Sozial, Home, Job, Aktivität, Position.
+## G1b zeigt sechs Werte (Hunger/Energie/Sozial/Hygiene/Spaß/Gesundheit),
+## Home, Job, Aktivität, Position.
 
 
 static func for_agent(sim: Simulation, agent_id: int) -> Dictionary:
@@ -32,6 +33,9 @@ static func for_agent(sim: Simulation, agent_id: int) -> Dictionary:
 		"hunger": NeedsModel.value_at(sim.store, row, now, NeedsModel.NEED_HUNGER, sim.config),
 		"energy": NeedsModel.value_at(sim.store, row, now, NeedsModel.NEED_ENERGY, sim.config),
 		"social": NeedsModel.value_at(sim.store, row, now, NeedsModel.NEED_SOCIAL, sim.config),
+		"hygiene": NeedsModel.value_at(sim.store, row, now, NeedsModel.NEED_HYGIENE, sim.config),
+		"fun": NeedsModel.value_at(sim.store, row, now, NeedsModel.NEED_FUN, sim.config),
+		"health": NeedsModel.value_at(sim.store, row, now, NeedsModel.NEED_HEALTH, sim.config),
 		"position": pos,
 		"next_event": sim.store.next_event[row],
 		"dead": sim.store.alive[row] == 0,
@@ -48,5 +52,8 @@ static func needs_snapshot(sim: Simulation, agent_id: int) -> PackedFloat64Array
 	out.append(NeedsModel.value_at(sim.store, row, now, NeedsModel.NEED_HUNGER, sim.config))
 	out.append(NeedsModel.value_at(sim.store, row, now, NeedsModel.NEED_ENERGY, sim.config))
 	out.append(NeedsModel.value_at(sim.store, row, now, NeedsModel.NEED_SOCIAL, sim.config))
+	out.append(NeedsModel.value_at(sim.store, row, now, NeedsModel.NEED_HYGIENE, sim.config))
+	out.append(NeedsModel.value_at(sim.store, row, now, NeedsModel.NEED_FUN, sim.config))
+	out.append(NeedsModel.value_at(sim.store, row, now, NeedsModel.NEED_HEALTH, sim.config))
 	return out
 

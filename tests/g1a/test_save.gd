@@ -17,6 +17,7 @@ static func _test_save_before_decision(ctx: G1aTestContext) -> void:
 	ctx.check(loaded.get("ok", false), "Load fehlgeschlagen")
 	if loaded.get("ok", false):
 		var b: Simulation = loaded["sim"]
+		ctx.check_eq(int(loaded.get("schema", 0)), 2, "Load-Schema ist nicht 2")
 		ctx.check_eq(b.state_hash(), a.state_hash(), "Snapshot nach Load nicht exakt")
 		_advance_chunked(a, G1aTestUtil.abs_time(0, 10, 0), 60)
 		b.advance_to(G1aTestUtil.abs_time(0, 10, 0))
@@ -31,9 +32,14 @@ static func _test_save_after_work(ctx: G1aTestContext) -> void:
 	var a: Simulation = G1aTestUtil.new_sim()
 	a.advance_to(G1aTestUtil.abs_time(0, 12, 5))
 	var path: String = G1aTestUtil.temp_path("after_work")
-	ctx.check(a.save_to(path).get("ok", false), "Save fehlgeschlagen")
+	var save_info: Dictionary = a.save_to(path)
+	ctx.check(save_info.get("ok", false), "Save fehlgeschlagen")
 	var loaded: Dictionary = Simulation.load_from(path)
 	ctx.check(loaded.get("ok", false), "Load fehlgeschlagen")
+	if save_info.get("ok", false) and loaded.get("ok", false):
+		print("G1B_SAVE schema=%d bytes=%d save_ms=%.2f load_ms=%.2f" % [
+			int(save_info.get("schema", 0)), int(save_info.get("bytes", 0)),
+			float(save_info.get("save_ms", 0.0)), float(loaded.get("load_ms", 0.0))])
 	if loaded.get("ok", false):
 		var b: Simulation = loaded["sim"]
 		ctx.check_eq(b.state_hash(), a.state_hash(), "Snapshot nach Arbeit nicht exakt")
@@ -51,7 +57,9 @@ static func _test_save_version(ctx: G1aTestContext) -> void:
 	var sim: Simulation = G1aTestUtil.new_sim()
 	sim.advance_to(G1aTestUtil.abs_time(0, 9, 0))
 	var path: String = G1aTestUtil.temp_path("version")
-	ctx.check(sim.save_to(path).get("ok", false), "Save fehlgeschlagen")
+	var save_info: Dictionary = sim.save_to(path)
+	ctx.check(save_info.get("ok", false), "Save fehlgeschlagen")
+	ctx.check_eq(int(save_info.get("schema", 0)), 2, "Save-Schema ist nicht 2")
 	var original: PackedByteArray = FileAccess.get_file_as_bytes(path)
 	var state_before: int = sim.state_hash()
 	var schema_path: String = G1aTestUtil.temp_path("version_schema")
@@ -61,6 +69,15 @@ static func _test_save_version(ctx: G1aTestContext) -> void:
 	var bad: Dictionary = Simulation.load_from(schema_path)
 	ctx.check(not bad.get("ok", false), "falsche Schema-Version wurde geladen")
 	ctx.check_eq(str(bad.get("error", "")), "unsupported_schema", "Fehlermeldung Schema")
+	# Schema 1 (G1a) wird sichtbar abgelehnt, nicht still migriert.
+	var schema1_path: String = G1aTestUtil.temp_path("version_schema1")
+	var schema1_bytes: PackedByteArray = original.duplicate()
+	schema1_bytes.encode_u32(4, 1)
+	_write_bytes(schema1_path, schema1_bytes)
+	var bad_schema1: Dictionary = Simulation.load_from(schema1_path)
+	ctx.check(not bad_schema1.get("ok", false), "Schema-1-Save wurde geladen")
+	ctx.check_eq(str(bad_schema1.get("error", "")), "unsupported_schema",
+		"Fehlermeldung Schema 1")
 	var magic_path: String = G1aTestUtil.temp_path("version_magic")
 	var magic_bytes: PackedByteArray = original.duplicate()
 	magic_bytes.encode_u32(0, 0xDEADBEEF)
@@ -77,7 +94,7 @@ static func _test_save_version(ctx: G1aTestContext) -> void:
 	ctx.check_eq(str(bad_hash.get("error", "")), "config_hash_mismatch",
 		"Fehlermeldung Config-Hash")
 	ctx.check_eq(sim.state_hash(), state_before, "fehlgeschlagenes Laden mutiert Sim")
-	for p in [path, schema_path, magic_path, hash_path]:
+	for p in [path, schema_path, schema1_path, magic_path, hash_path]:
 		G1aTestUtil.remove_temp(p)
 
 

@@ -18,7 +18,7 @@ static func _test_inspector(ctx: G1aTestContext) -> void:
 	ctx.check(not info.is_empty(), "Inspector liefert keine Daten")
 	for key in ["name", "age", "role_name", "household_id", "home_name",
 			"job_name", "activity_name", "hunger", "energy", "social",
-			"position", "next_event"]:
+			"hygiene", "fun", "health", "position", "next_event"]:
 		ctx.check(info.has(key), "Inspector-Feld fehlt: " + key)
 	ctx.check_eq(info.get("name", ""), "Arnd", "Inspector-Name")
 	# Feldlabel: kurzer Name plus ID, nicht auf einen Aktivitätsbuchstaben
@@ -31,14 +31,18 @@ static func _test_inspector(ctx: G1aTestContext) -> void:
 	ctx.check(field_label != "A", "Feldlabel auf 'A' gekürzt")
 	ctx.check(str(info.get("home_name", "")) != "", "Home-Name leer")
 	ctx.check(str(info.get("job_name", "")) != "", "Job-Name leer")
-	for need_key in ["hunger", "energy", "social"]:
+	for need_key in ["hunger", "energy", "social", "hygiene", "fun", "health"]:
 		var v: float = float(info.get(need_key, -1.0))
 		ctx.check(v >= 0.0 and v <= 100.0, "Need außerhalb 0..100: " + need_key)
-	# Needs-Snapshot stimmt mit Inspector überein.
+	# Needs-Snapshot stimmt mit Inspector überein; sechs Werte inkl. Gesundheit.
 	var snap: PackedFloat64Array = InspectorModel.needs_snapshot(sim, 1)
+	ctx.check_eq(snap.size(), NeedsModel.NEED_COUNT, "Needs-Snapshot nicht sechs Werte")
 	ctx.check_close(snap[0], float(info["hunger"]), 0.001, "Hunger-Snapshot")
 	ctx.check_close(snap[1], float(info["energy"]), 0.001, "Energie-Snapshot")
 	ctx.check_close(snap[2], float(info["social"]), 0.001, "Sozial-Snapshot")
+	ctx.check_close(snap[3], float(info["hygiene"]), 0.001, "Hygiene-Snapshot")
+	ctx.check_close(snap[4], float(info["fun"]), 0.001, "Spaß-Snapshot")
+	ctx.check_close(snap[5], float(info["health"]), 0.001, "Gesundheit-Snapshot")
 
 
 static func _test_event_log(ctx: G1aTestContext) -> void:

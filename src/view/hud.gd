@@ -56,7 +56,7 @@ func _build() -> void:
 	_time_label.add_theme_font_size_override("font_size", 20)
 	top_box.add_child(_time_label)
 	_grain_label = Label.new()
-	_grain_label.custom_minimum_size.x = 180
+	_grain_label.custom_minimum_size.x = 470
 	_grain_label.add_theme_font_size_override("font_size", 16)
 	top_box.add_child(_grain_label)
 	_pause_button = Button.new()
@@ -86,8 +86,8 @@ func _build() -> void:
 	# Inspector links
 	var inspector: PanelContainer = PanelContainer.new()
 	inspector.position = Vector2(12, 60)
-	inspector.size = Vector2(310, 286)
-	inspector.custom_minimum_size = Vector2(310, 240)
+	inspector.size = Vector2(310, 470)
+	inspector.custom_minimum_size = Vector2(310, 440)
 	inspector.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.add_child(inspector)
 	var inspector_margin: MarginContainer = MarginContainer.new()
@@ -109,7 +109,7 @@ func _build() -> void:
 	_inspector_body.custom_minimum_size = Vector2(290, 62)
 	_inspector_body.scroll_active = false
 	inspector_box.add_child(_inspector_body)
-	for need in [NeedsModel.NEED_HUNGER, NeedsModel.NEED_ENERGY, NeedsModel.NEED_SOCIAL]:
+	for need in range(NeedsModel.NEED_COUNT):
 		var row: HBoxContainer = HBoxContainer.new()
 		var label: Label = Label.new()
 		label.text = NeedsModel.need_name(need)
@@ -127,7 +127,8 @@ func _build() -> void:
 		bar_bg.corner_radius_bottom_right = 3
 		var bar_fill: StyleBoxFlat = StyleBoxFlat.new()
 		bar_fill.bg_color = [Color(0.88, 0.48, 0.28), Color(0.36, 0.62, 0.92),
-			Color(0.48, 0.78, 0.48)][need]
+			Color(0.48, 0.78, 0.48), Color(0.42, 0.78, 0.82),
+			Color(0.86, 0.70, 0.34), Color(0.88, 0.42, 0.52)][need]
 		bar_fill.corner_radius_top_left = 3
 		bar_fill.corner_radius_top_right = 3
 		bar_fill.corner_radius_bottom_left = 3
@@ -214,7 +215,10 @@ func refresh(sim: Simulation) -> void:
 	_last_refresh_ms = now_ms
 	_time_label.text = "%s · %s   %dx" % [sim.clock.time_string(),
 		_season_name(sim.clock.day_index()), view_state.speed]
-	_grain_label.text = "Grain: %d   (%d erzeugt)" % [sim.grain, sim.grain_produced]
+	var field: Building = sim.world.building_by_id(WorldMap.B_FIELD)
+	var stage_text: String = Building.field_stage_name(field.field_stage) if field != null else "?"
+	_grain_label.text = "Grain: %d (+%d geerntet) · Feld: %s · Jahr %d" % [
+		sim.grain, sim.grain_harvested, stage_text, sim.year_index + 1]
 	if view_state.selected_agent_id > 0:
 		var info: Dictionary = InspectorModel.for_agent(sim, view_state.selected_agent_id)
 		if info.is_empty():
@@ -227,14 +231,8 @@ func refresh(sim: Simulation) -> void:
 				int(info["age"]), str(info["role_name"]), int(info["household_id"]),
 				str(info["home_name"]), str(info["job_name"]), str(info["activity_name"]),
 				pos.x, pos.y]
-			for need in [NeedsModel.NEED_HUNGER, NeedsModel.NEED_ENERGY, NeedsModel.NEED_SOCIAL]:
-				var value: float
-				if need == NeedsModel.NEED_HUNGER:
-					value = float(info["hunger"])
-				elif need == NeedsModel.NEED_ENERGY:
-					value = float(info["energy"])
-				else:
-					value = float(info["social"])
+			for need in range(NeedsModel.NEED_COUNT):
+				var value: float = _need_value_from_info(info, need)
 				(_need_bars[need] as ProgressBar).value = value
 				(_need_values[need] as Label).text = "%.0f" % value
 	else:
@@ -266,8 +264,26 @@ func _refresh_event_log(sim: Simulation) -> void:
 	_event_log.text = "\n".join(lines)
 
 
+func _need_value_from_info(info: Dictionary, need: int) -> float:
+	match need:
+		NeedsModel.NEED_HUNGER:
+			return float(info.get("hunger", 0.0))
+		NeedsModel.NEED_ENERGY:
+			return float(info.get("energy", 0.0))
+		NeedsModel.NEED_SOCIAL:
+			return float(info.get("social", 0.0))
+		NeedsModel.NEED_HYGIENE:
+			return float(info.get("hygiene", 0.0))
+		NeedsModel.NEED_FUN:
+			return float(info.get("fun", 0.0))
+		NeedsModel.NEED_HEALTH:
+			return float(info.get("health", 0.0))
+	return 0.0
+
+
 func _season_name(day: int) -> String:
-	return ["Frühling", "Sommer", "Herbst", "Winter"][(day / 30) % 4]
+	var season: int = (day % SimConfig.YEAR_DAYS) * SimConfig.SEASONS / SimConfig.YEAR_DAYS
+	return ["Frühling", "Sommer", "Herbst", "Winter"][season]
 
 
 func show_status(message: String, seconds: float = 4.0) -> void:

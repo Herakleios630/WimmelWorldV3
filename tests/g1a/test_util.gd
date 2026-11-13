@@ -27,6 +27,12 @@ static func set_need(sim: Simulation, agent_id: int, need: int, value: float,
 			sim.store.energy[row] = value
 		NeedsModel.NEED_SOCIAL:
 			sim.store.social[row] = value
+		NeedsModel.NEED_HYGIENE:
+			sim.store.hygiene[row] = value
+		NeedsModel.NEED_FUN:
+			sim.store.fun[row] = value
+		NeedsModel.NEED_HEALTH:
+			sim.store.health[row] = value
 	if need == NeedsModel.NEED_HUNGER:
 		sim.store.meal_retry[row] = 0
 	if wake:

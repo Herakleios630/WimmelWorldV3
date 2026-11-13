@@ -94,5 +94,8 @@ static func _test_no_per_agent_dicts(ctx: G1aTestContext) -> void:
 			"Dictionary im Hot-Loop-Code: " + path)
 	var store: AgentStore = G1aTestUtil.new_sim().store
 	ctx.check(store.hunger is PackedFloat64Array, "hunger ist kein PackedFloat64Array")
+	ctx.check(store.hygiene is PackedFloat64Array, "hygiene ist kein PackedFloat64Array")
+	ctx.check(store.fun is PackedFloat64Array, "fun ist kein PackedFloat64Array")
+	ctx.check(store.health is PackedFloat64Array, "health ist kein PackedFloat64Array")
 	ctx.check(store.next_event is PackedInt64Array, "next_event ist kein PackedInt64Array")
 	ctx.check(store.activity is PackedByteArray, "activity ist kein PackedByteArray")

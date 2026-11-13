@@ -17,7 +17,8 @@ const ACT_SLEEP: int = 4
 const ACT_SOCIAL: int = 5
 const ACT_LEARN: int = 6
 const ACT_PLAY: int = 7
-const ACT_COUNT: int = 8
+const ACT_HYGIENE: int = 8
+const ACT_COUNT: int = 9
 
 const JOB_NONE: int = 0
 const JOB_FIELD: int = 1
@@ -58,6 +59,9 @@ var need_time: PackedInt64Array = PackedInt64Array()
 var hunger: PackedFloat64Array = PackedFloat64Array()
 var energy: PackedFloat64Array = PackedFloat64Array()
 var social: PackedFloat64Array = PackedFloat64Array()
+var hygiene: PackedFloat64Array = PackedFloat64Array()
+var fun: PackedFloat64Array = PackedFloat64Array()
+var health: PackedFloat64Array = PackedFloat64Array()
 
 var action_end: PackedInt64Array = PackedInt64Array()
 var work_start: PackedInt64Array = PackedInt64Array()
@@ -71,7 +75,9 @@ var row_of_id: PackedInt32Array = PackedInt32Array()
 
 func add_agent(agent_id: int, p_age: int, p_role: int, p_household: int,
 		p_home: int, p_job_id: int, p_job_kind: int, p_x: float, p_y: float,
-		p_hunger: float, p_energy: float, p_social: float, now: int) -> int:
+		p_hunger: float, p_energy: float, p_social: float, now: int,
+		p_hygiene: float = 80.0, p_fun: float = 70.0,
+		p_health: float = 100.0) -> int:
 	var row: int = count
 	count += 1
 	ids.append(agent_id)
@@ -103,6 +109,9 @@ func add_agent(agent_id: int, p_age: int, p_role: int, p_household: int,
 	hunger.append(p_hunger)
 	energy.append(p_energy)
 	social.append(p_social)
+	hygiene.append(p_hygiene)
+	fun.append(p_fun)
+	health.append(p_health)
 	action_end.append(0)
 	work_start.append(-1)
 	work_end.append(-1)
@@ -123,11 +132,14 @@ func add_agent(agent_id: int, p_age: int, p_role: int, p_household: int,
 ## Neue ID, nie wiederverwendet. Für Lebenszyklus-Tests/G1b vorbereitet.
 func spawn_agent(p_age: int, p_role: int, p_household: int, p_home: int,
 		p_job_id: int, p_job_kind: int, p_x: float, p_y: float,
-		p_hunger: float, p_energy: float, p_social: float, now: int) -> int:
+		p_hunger: float, p_energy: float, p_social: float, now: int,
+		p_hygiene: float = 80.0, p_fun: float = 70.0,
+		p_health: float = 100.0) -> int:
 	var new_id: int = next_id
 	next_id += 1
 	add_agent(new_id, p_age, p_role, p_household, p_home, p_job_id,
-		p_job_kind, p_x, p_y, p_hunger, p_energy, p_social, now)
+		p_job_kind, p_x, p_y, p_hunger, p_energy, p_social, now,
+		p_hygiene, p_fun, p_health)
 	return new_id
 
 
@@ -156,6 +168,7 @@ static func activity_name(act: int) -> String:
 		ACT_SOCIAL: return "Sozial"
 		ACT_LEARN: return "Lernen"
 		ACT_PLAY: return "Spielen"
+		ACT_HYGIENE: return "Waschen"
 	return "?"
 
 
@@ -201,6 +214,9 @@ func state_hash(now: int) -> int:
 		h = HashUtil.mix_f64(h, hunger[i])
 		h = HashUtil.mix_f64(h, energy[i])
 		h = HashUtil.mix_f64(h, social[i])
+		h = HashUtil.mix_f64(h, hygiene[i])
+		h = HashUtil.mix_f64(h, fun[i])
+		h = HashUtil.mix_f64(h, health[i])
 		h = HashUtil.mix_i64(h, action_end[i])
 		h = HashUtil.mix_i64(h, work_start[i])
 		h = HashUtil.mix_i64(h, work_end[i])

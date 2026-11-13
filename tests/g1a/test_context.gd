@@ -1,6 +1,7 @@
 class_name G1aTestContext
 extends RefCounted
 
+var gate_name: String = "G1A"
 var results: Array = []
 var current_id: String = ""
 var current_title: String = ""
@@ -84,9 +85,9 @@ func print_summary() -> void:
 	for result in results:
 		if result["passed"]:
 			passed += 1
-	print("G1A_SUITE results=%d passed=%d failed=%d checks=%d" % [
-		results.size(), passed, results.size() - passed, total_checks])
+	print("%s_SUITE results=%d passed=%d failed=%d checks=%d" % [
+		gate_name, results.size(), passed, results.size() - passed, total_checks])
 	if not all_passed():
-		print("G1A_SUITE_FAILED " + ",".join(failed_ids()))
+		print("%s_SUITE_FAILED " % gate_name + ",".join(failed_ids()))
 	else:
-		print("G1A_SUITE_OK")
+		print("%s_SUITE_OK" % gate_name)
