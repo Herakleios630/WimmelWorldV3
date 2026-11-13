@@ -123,10 +123,11 @@ static func _test_sowing_harvest_balance(ctx: G1aTestContext) -> void:
 	ctx.check(sim.meals_served > 0, "keine Mahlzeiten im Jahr")
 	ctx.check(sim.meals_skipped > 0, "anfängliche Knappheit nicht sichtbar")
 	ctx.check(sim.grain >= 0, "Grain-Bestand negativ")
-	print("G1B_YEAR year=%d harvests=%d start=%d produced=%d meals=%d skipped=%d end=%d grain=%d health_a1=%.1f" % [
+	print("G1B_YEAR year=%d harvests=%d start=%d produced=%d meals=%d skipped=%d end=%d grain=%d births=%d deaths=%d alive=%d health_a1=%.1f" % [
 		sim.last_year_index, sim.last_year_harvests, sim.last_year_start_grain,
 		sim.last_year_grain_produced, sim.last_year_meals_served,
 		sim.last_year_meals_skipped, sim.last_year_end_grain, sim.grain,
+		sim.births, sim.deaths, sim.count_alive(),
 		sim.store.health[G1aTestUtil.row_of(sim, 1)]])
 	var harvest_times: PackedStringArray = PackedStringArray()
 	for event in sim.logs.debug_events:

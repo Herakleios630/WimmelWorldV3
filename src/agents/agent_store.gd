@@ -35,6 +35,13 @@ var household_id: PackedInt32Array = PackedInt32Array()
 var home_id: PackedInt32Array = PackedInt32Array()
 var job_id: PackedInt32Array = PackedInt32Array()
 var job_kind: PackedByteArray = PackedByteArray()
+var sex: PackedByteArray = PackedByteArray()
+var birth_day: PackedInt32Array = PackedInt32Array()
+var pregnant: PackedByteArray = PackedByteArray()
+var pregnancy_due: PackedInt64Array = PackedInt64Array()
+var pregnancy_father_id: PackedInt32Array = PackedInt32Array()
+var death_day: PackedInt32Array = PackedInt32Array()
+var death_cause: PackedByteArray = PackedByteArray()
 
 var activity: PackedByteArray = PackedByteArray()
 var intent: PackedByteArray = PackedByteArray()
@@ -77,7 +84,10 @@ func add_agent(agent_id: int, p_age: int, p_role: int, p_household: int,
 		p_home: int, p_job_id: int, p_job_kind: int, p_x: float, p_y: float,
 		p_hunger: float, p_energy: float, p_social: float, now: int,
 		p_hygiene: float = 80.0, p_fun: float = 70.0,
-		p_health: float = 100.0) -> int:
+		p_health: float = 100.0, p_sex: int = 0, p_birth_day: int = -1,
+		p_pregnant: int = 0, p_pregnancy_due: int = 0,
+		p_pregnancy_father: int = 0, p_death_day: int = -1,
+		p_death_cause: int = 0) -> int:
 	var row: int = count
 	count += 1
 	ids.append(agent_id)
@@ -88,6 +98,16 @@ func add_agent(agent_id: int, p_age: int, p_role: int, p_household: int,
 	home_id.append(p_home)
 	job_id.append(p_job_id)
 	job_kind.append(p_job_kind)
+	sex.append(p_sex)
+	var actual_birth_day: int = p_birth_day
+	if actual_birth_day < 0:
+		actual_birth_day = -p_age * SimConfig.YEAR_DAYS
+	birth_day.append(actual_birth_day)
+	pregnant.append(p_pregnant)
+	pregnancy_due.append(p_pregnancy_due)
+	pregnancy_father_id.append(p_pregnancy_father)
+	death_day.append(p_death_day)
+	death_cause.append(p_death_cause)
 	activity.append(ACT_IDLE)
 	intent.append(ACT_IDLE)
 	action_source.append(0)
@@ -134,12 +154,16 @@ func spawn_agent(p_age: int, p_role: int, p_household: int, p_home: int,
 		p_job_id: int, p_job_kind: int, p_x: float, p_y: float,
 		p_hunger: float, p_energy: float, p_social: float, now: int,
 		p_hygiene: float = 80.0, p_fun: float = 70.0,
-		p_health: float = 100.0) -> int:
+		p_health: float = 100.0, p_sex: int = 0, p_birth_day: int = -1,
+		p_pregnant: int = 0, p_pregnancy_due: int = 0,
+		p_pregnancy_father: int = 0, p_death_day: int = -1,
+		p_death_cause: int = 0) -> int:
 	var new_id: int = next_id
 	next_id += 1
 	add_agent(new_id, p_age, p_role, p_household, p_home, p_job_id,
 		p_job_kind, p_x, p_y, p_hunger, p_energy, p_social, now,
-		p_hygiene, p_fun, p_health)
+		p_hygiene, p_fun, p_health, p_sex, p_birth_day, p_pregnant,
+		p_pregnancy_due, p_pregnancy_father, p_death_day, p_death_cause)
 	return new_id
 
 
@@ -193,6 +217,13 @@ func state_hash(now: int) -> int:
 		h = HashUtil.mix(h, home_id[i])
 		h = HashUtil.mix(h, job_id[i])
 		h = HashUtil.mix(h, job_kind[i])
+		h = HashUtil.mix(h, sex[i])
+		h = HashUtil.mix_i64(h, birth_day[i])
+		h = HashUtil.mix(h, pregnant[i])
+		h = HashUtil.mix_i64(h, pregnancy_due[i])
+		h = HashUtil.mix(h, pregnancy_father_id[i])
+		h = HashUtil.mix_i64(h, death_day[i])
+		h = HashUtil.mix(h, death_cause[i])
 		h = HashUtil.mix(h, activity[i])
 		h = HashUtil.mix(h, intent[i])
 		h = HashUtil.mix(h, action_source[i])

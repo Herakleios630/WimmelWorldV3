@@ -12,11 +12,15 @@ var household_id: int = 0
 var home_building_id: int = 0
 var job_id: int = 0
 var job_kind: int = 0
+var birth_day: int = 0
+var death_day: int = -1
+var death_cause: int = 0
 
 
 func _init(p_id: int = 0, p_name: String = "", p_sex: int = 0, p_age: int = 0,
 		p_role: int = 0, p_household: int = 0, p_home: int = 0,
-		p_job_id: int = 0, p_job_kind: int = 0) -> void:
+		p_job_id: int = 0, p_job_kind: int = 0, p_birth_day: int = -1,
+		p_death_day: int = -1, p_death_cause: int = 0) -> void:
 	id = p_id
 	name = p_name
 	sex = p_sex
@@ -26,6 +30,11 @@ func _init(p_id: int = 0, p_name: String = "", p_sex: int = 0, p_age: int = 0,
 	home_building_id = p_home
 	job_id = p_job_id
 	job_kind = p_job_kind
+	birth_day = p_birth_day
+	if birth_day < 0:
+		birth_day = -p_age * SimConfig.YEAR_DAYS
+	death_day = p_death_day
+	death_cause = p_death_cause
 
 
 func state_hash() -> int:
@@ -39,4 +48,7 @@ func state_hash() -> int:
 	h = HashUtil.mix(h, home_building_id)
 	h = HashUtil.mix(h, job_id)
 	h = HashUtil.mix(h, job_kind)
+	h = HashUtil.mix_i64(h, birth_day)
+	h = HashUtil.mix_i64(h, death_day)
+	h = HashUtil.mix(h, death_cause)
 	return h

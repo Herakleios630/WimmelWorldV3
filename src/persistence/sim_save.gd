@@ -9,8 +9,8 @@ extends RefCounted
 ##         PAYLOAD_SIZE u64
 
 const MAGIC: int = 0x57473141
-const SCHEMA_VERSION: int = 2
-const GAME_VERSION: int = 2
+const SCHEMA_VERSION: int = 3
+const GAME_VERSION: int = 3
 const HEADER_SIZE: int = 28
 const MAX_ARRAY: int = 2000000
 
@@ -101,6 +101,11 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 	sim.meals_skipped = reader.i64()
 	sim.harvests_completed = reader.i64()
 	sim.field_cycles_completed = reader.i64()
+	sim.births = reader.i64()
+	sim.deaths = reader.i64()
+	sim.partnerships_formed = reader.i64()
+	sim.households_dissolved = reader.i64()
+	sim.lifecycle_ticks = reader.i64()
 	var field: Building = sim.world.building_by_id(WorldMap.B_FIELD)
 	var field_stage: int = reader.i32()
 	var field_work_s: int = reader.i64()
@@ -172,6 +177,29 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 	w.i64(config.field_harvest_work_s)
 	w.i64(config.field_grow_s)
 	w.i64(config.field_harvest_yield)
+	w.f64(config.health_critical_threshold)
+	w.f64(config.health_critical_monthly_chance)
+	w.f64(config.health_multiplier_curve)
+	w.i64(config.lifecycle_first_roll_day)
+	w.i64(config.lifecycle_roll_interval_days)
+	w.i64(config.lifecycle_rolls_per_year)
+	w.f64(config.mortality_age_0_4)
+	w.f64(config.mortality_age_5_14)
+	w.f64(config.mortality_age_15_29)
+	w.f64(config.mortality_age_30_39)
+	w.f64(config.mortality_age_40_49)
+	w.f64(config.mortality_age_50_64)
+	w.f64(config.mortality_age_65_79)
+	w.f64(config.mortality_age_80_plus)
+	w.i64(config.pair_min_age)
+	w.i64(config.pair_max_age)
+	w.i64(config.fertile_female_min)
+	w.i64(config.fertile_female_max)
+	w.i64(config.fertile_male_min)
+	w.i64(config.fertile_male_max)
+	w.f64(config.monthly_conception_chance)
+	w.i64(config.pregnancy_ticks)
+	w.f64(config.birth_death_chance)
 
 	w.i64(sim.clock.now)
 	var sched: EventScheduler = sim.scheduler
@@ -197,6 +225,11 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 	w.i64(sim.meals_skipped)
 	w.i64(sim.harvests_completed)
 	w.i64(sim.field_cycles_completed)
+	w.i64(sim.births)
+	w.i64(sim.deaths)
+	w.i64(sim.partnerships_formed)
+	w.i64(sim.households_dissolved)
+	w.i64(sim.lifecycle_ticks)
 	var field: Building = sim.world.building_by_id(WorldMap.B_FIELD)
 	w.i32(field.field_stage if field != null else 0)
 	w.i64(field.field_work_s if field != null else 0)
@@ -269,6 +302,13 @@ static func _write_store(w: ByteWriter, store: AgentStore) -> void:
 	_write_i64_array(w, store.work_accum, store.count)
 	_write_i64_array(w, store.meal_retry, store.count)
 	_write_i32_array(w, store.shortage_logged_day, store.count)
+	_write_u8_array(w, store.sex, store.count)
+	_write_i32_array(w, store.birth_day, store.count)
+	_write_u8_array(w, store.pregnant, store.count)
+	_write_i64_array(w, store.pregnancy_due, store.count)
+	_write_i32_array(w, store.pregnancy_father_id, store.count)
+	_write_i32_array(w, store.death_day, store.count)
+	_write_u8_array(w, store.death_cause, store.count)
 
 
 static func _read_store(r: ByteReader) -> AgentStore:
@@ -313,6 +353,13 @@ static func _read_store(r: ByteReader) -> AgentStore:
 	store.work_accum = _read_i64_array(r)
 	store.meal_retry = _read_i64_array(r)
 	store.shortage_logged_day = _read_i32_array(r)
+	store.sex = _read_u8_array(r)
+	store.birth_day = _read_i32_array(r)
+	store.pregnant = _read_u8_array(r)
+	store.pregnancy_due = _read_i64_array(r)
+	store.pregnancy_father_id = _read_i32_array(r)
+	store.death_day = _read_i32_array(r)
+	store.death_cause = _read_u8_array(r)
 	if store.ids.size() != store.count:
 		r.ok = false
 		r.error = "store_count_mismatch"
@@ -342,6 +389,9 @@ static func _write_records(w: ByteWriter, records: Array) -> void:
 		w.i32(rec.home_building_id)
 		w.i32(rec.job_id)
 		w.i32(rec.job_kind)
+		w.i32(rec.birth_day)
+		w.i32(rec.death_day)
+		w.i32(rec.death_cause)
 
 
 static func _read_records(r: ByteReader) -> Array:
@@ -358,6 +408,9 @@ static func _read_records(r: ByteReader) -> Array:
 		rec.home_building_id = r.i32()
 		rec.job_id = r.i32()
 		rec.job_kind = r.i32()
+		rec.birth_day = r.i32()
+		rec.death_day = r.i32()
+		rec.death_cause = r.i32()
 		out.append(rec)
 	return out
 
@@ -370,6 +423,12 @@ static func _write_households(w: ByteWriter, households: Array) -> void:
 		w.i32(h.home_building_id)
 		w.u32(h.member_ids.size())
 		for member in h.member_ids:
+			w.i32(member)
+		w.i32(h.dissolved)
+		w.i32(h.dissolved_day)
+		w.i32(h.dissolved_reason)
+		w.u32(h.archived_member_ids.size())
+		for member in h.archived_member_ids:
 			w.i32(member)
 
 
@@ -384,6 +443,13 @@ static func _read_households(r: ByteReader) -> Array:
 		h.member_ids.resize(n)
 		for j in n:
 			h.member_ids[j] = r.i32()
+		h.dissolved = r.i32()
+		h.dissolved_day = r.i32()
+		h.dissolved_reason = r.i32()
+		var an: int = r.u32()
+		h.archived_member_ids.resize(an)
+		for j in an:
+			h.archived_member_ids[j] = r.i32()
 		out.append(h)
 	return out
 
@@ -523,6 +589,29 @@ static func _read_config(r: ByteReader) -> SimConfig:
 	config.field_harvest_work_s = r.i64()
 	config.field_grow_s = r.i64()
 	config.field_harvest_yield = r.i64()
+	config.health_critical_threshold = r.f64()
+	config.health_critical_monthly_chance = r.f64()
+	config.health_multiplier_curve = r.f64()
+	config.lifecycle_first_roll_day = r.i64()
+	config.lifecycle_roll_interval_days = r.i64()
+	config.lifecycle_rolls_per_year = r.i64()
+	config.mortality_age_0_4 = r.f64()
+	config.mortality_age_5_14 = r.f64()
+	config.mortality_age_15_29 = r.f64()
+	config.mortality_age_30_39 = r.f64()
+	config.mortality_age_40_49 = r.f64()
+	config.mortality_age_50_64 = r.f64()
+	config.mortality_age_65_79 = r.f64()
+	config.mortality_age_80_plus = r.f64()
+	config.pair_min_age = r.i64()
+	config.pair_max_age = r.i64()
+	config.fertile_female_min = r.i64()
+	config.fertile_female_max = r.i64()
+	config.fertile_male_min = r.i64()
+	config.fertile_male_max = r.i64()
+	config.monthly_conception_chance = r.f64()
+	config.pregnancy_ticks = r.i64()
+	config.birth_death_chance = r.f64()
 	return config
 
 

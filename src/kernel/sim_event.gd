@@ -36,6 +36,15 @@ const T_FIELD_RIPE: int = 24
 const T_FIELD_HARVEST: int = 25
 const T_YEAR_SUMMARY: int = 26
 const T_ACTIVITY_END: int = 27
+const T_AGE_UP: int = 28
+const T_ROLE_CHANGE: int = 29
+const T_PARTNER_FORMED: int = 30
+const T_PREGNANCY: int = 31
+const T_BIRTH: int = 32
+const T_DEATH: int = 33
+const T_HOUSEHOLD_DISSOLVED: int = 34
+const T_HOUSEHOLD_REASSIGN: int = 35
+const T_HOUSEHOLD_WARD: int = 36
 
 var id: int = 0
 var time: int = 0
@@ -89,6 +98,15 @@ static func type_name(t: int) -> String:
 		T_FIELD_HARVEST: return "field_harvest"
 		T_YEAR_SUMMARY: return "year_summary"
 		T_ACTIVITY_END: return "activity_end"
+		T_AGE_UP: return "age_up"
+		T_ROLE_CHANGE: return "role_change"
+		T_PARTNER_FORMED: return "partner_formed"
+		T_PREGNANCY: return "pregnancy"
+		T_BIRTH: return "birth"
+		T_DEATH: return "death"
+		T_HOUSEHOLD_DISSOLVED: return "household_dissolved"
+		T_HOUSEHOLD_REASSIGN: return "household_reassign"
+		T_HOUSEHOLD_WARD: return "household_ward"
 		_: return "unknown"
 
 

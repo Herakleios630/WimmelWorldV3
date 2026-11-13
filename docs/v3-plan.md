@@ -1,6 +1,6 @@
 # WimmelWorld V3 — Planung
 
-Status: G1b Schritt 1 bestanden; Schritt 2 (Lebenszyklus) bereit  
+Status: G1b Schritte 1–2 bestanden; Schritt 3 (Chronik/Beobachtung) bereit  
 Stand: 2026-11-13  
 Arbeitsmodus: **Nur Analyse und Planung. Kein Code, keine Implementierung, keine Änderung an V1/V2.**
 
@@ -446,7 +446,7 @@ sichtbare Demo und Review. „PARTIAL“ ist kein Abschluss.
 | **G6** | Erweiterungen | Krieg, Wildtiere, Fantasy-Addons, Cursed Beyond | Separate Planung |
 
 **Stand 2026-11-13:** G0 bestanden; G0.5 bestanden; G1a/G1a.1 bestanden;
-G1b Schritt 1 bestanden, Schritte 2–3 offen.
+G1b Schritte 1–2 bestanden, Schritt 3 offen.
 
 **Wichtig:** G1a/G1b sind formale Gates; G1a ist kein halbes G1. G0.5 ist der
 Machbarkeitsnachweis vor dem ersten Gameplay-Code. G4a/G5a sind

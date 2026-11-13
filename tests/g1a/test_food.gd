@@ -13,6 +13,7 @@ static func run(ctx: G1aTestContext) -> void:
 static func _test_daily_work(ctx: G1aTestContext) -> void:
 	ctx.begin("T-FOOD-01", "Feldarbeit ist Fortschritt; Ernte erzeugt Grain")
 	var sim: Simulation = G1aTestUtil.new_sim()
+	var start_grain: int = sim.config.start_grain
 	var field: Building = sim.world.building_by_id(WorldMap.B_FIELD)
 	sim.advance_to(G1aTestUtil.abs_time(0, 10, 0))
 	ctx.check_eq(field.field_stage, Building.FIELD_PLOWING, "Feld pflügt um 10:00 nicht")
@@ -25,7 +26,7 @@ static func _test_daily_work(ctx: G1aTestContext) -> void:
 	ctx.check(field.field_work_s < sim.config.field_plow_work_s,
 		"Pflügen ist sofort fertig")
 	ctx.check_eq(sim.meals_served, 20, "Frühstück/Mittag nicht serviert")
-	ctx.check_eq(sim.grain, 60 - 20, "Grain-Bestand nach Mittag")
+	ctx.check_eq(sim.grain, start_grain - 20, "Grain-Bestand nach Mittag")
 	sim.advance_to(G1aTestUtil.abs_time(0, 13, 30))
 	ctx.check_eq(field.field_stage, Building.FIELD_PLOWING,
 		"Feld verlässt PLOWING vor dem zweiten Arbeitsslot nicht")
@@ -34,11 +35,11 @@ static func _test_daily_work(ctx: G1aTestContext) -> void:
 		"Feld nicht gepflügt nach dem Nachmittag")
 	ctx.check_eq(sim.grain_produced, 0, "Grain vor der Ernte erzeugt")
 	ctx.check_eq(sim.meals_served, 20, "Abendessen vor 18:00 serviert")
-	ctx.check_eq(sim.grain, 60 - 20, "Grain-Bestand vor dem Abendessen")
+	ctx.check_eq(sim.grain, start_grain - 20, "Grain-Bestand vor dem Abendessen")
 	sim.advance_to(G1aTestUtil.abs_time(0, 18, 31))
 	ctx.check_eq(sim.meals_served, 30, "Abendessen nicht vollständig serviert")
 	ctx.check_eq(sim.meals_skipped, 0, "Mahlzeit ohne Knappheit übersprungen")
-	ctx.check_eq(sim.grain, 60 - 30, "Tages-Grain-Bestand")
+	ctx.check_eq(sim.grain, start_grain - 30, "Tages-Grain-Bestand")
 	# Aussaat am Tag 1, Wachstum ist Kalenderzeit, erste Ernte an Tag 6.
 	sim.advance_to(G1aTestUtil.abs_time(1, 12, 31))
 	ctx.check_eq(field.field_stage, Building.FIELD_GROWING,
@@ -49,7 +50,7 @@ static func _test_daily_work(ctx: G1aTestContext) -> void:
 	ctx.check_eq(sim.harvests_completed, 1, "Ernte nicht genau einmal abgeschlossen")
 	ctx.check_eq(field.field_stage, Building.FIELD_FALLOW,
 		"Feld nach der Ernte nicht FALLOW")
-	ctx.check_eq(sim.grain, 60 + sim.grain_produced - sim.meals_served,
+	ctx.check_eq(sim.grain, start_grain + sim.grain_produced - sim.meals_served,
 		"Grain-Bilanz nach der ersten Ernte")
 
 

@@ -19,6 +19,7 @@ var scheduler: EventScheduler
 var rng: RngStreams
 var logs: SimLogs
 var decisions: DecisionSystem
+var lifecycle: LifecycleSystem
 
 var records: Array = []
 var households: Array = []
@@ -31,6 +32,11 @@ var meals_served: int = 0
 var meals_skipped: int = 0
 var harvests_completed: int = 0
 var field_cycles_completed: int = 0
+var births: int = 0
+var deaths: int = 0
+var partnerships_formed: int = 0
+var households_dissolved: int = 0
+var lifecycle_ticks: int = 0
 
 # Jahresbilanz (30-Tage-Jahr). year_* laufen, last_year_* ist der letzte
 # abgeschlossene Jahresabschluss.
@@ -65,6 +71,7 @@ func setup_new(p_config: SimConfig) -> void:
 	scheduler = EventScheduler.new()
 	logs = SimLogs.new()
 	decisions = DecisionSystem.new(self)
+	lifecycle = LifecycleSystem.new(self)
 	records = AgentRecords.default_agents()
 	households = AgentRecords.default_households()
 	relationships = AgentRecords.default_relationships()
@@ -75,6 +82,11 @@ func setup_new(p_config: SimConfig) -> void:
 	meals_skipped = 0
 	harvests_completed = 0
 	field_cycles_completed = 0
+	births = 0
+	deaths = 0
+	partnerships_formed = 0
+	households_dissolved = 0
+	lifecycle_ticks = 0
 	year_index = 0
 	year_start_grain = config.start_grain
 	year_grain_produced = 0
@@ -108,7 +120,7 @@ func _spawn_initial_agents() -> void:
 			home_point.x, home_point.y,
 			config.start_hunger, config.start_energy, config.start_social,
 			clock.now, config.start_hygiene, config.start_fun,
-			config.start_health)
+			config.start_health, rec.sex, rec.birth_day)
 
 
 func advance_to(target_time: int) -> int:
@@ -140,6 +152,7 @@ func _dispatch(kind: int, payload: int) -> void:
 		var day: int = clock.day_index()
 		logs.emit(clock.now, SimEvent.T_DAY_START, SimEvent.IMPORTANCE_ROUTINE,
 			0, "day_start", "Tag beginnt", day)
+		lifecycle.on_day_tick(day)
 		if day > 0 and day % SimConfig.YEAR_DAYS == 0:
 			_complete_year()
 		var next_midnight: int = (clock.day_index() + 1) * SimConfig.TICKS_PER_DAY
@@ -217,6 +230,11 @@ func state_hash() -> int:
 	h = HashUtil.mix_i64(h, meals_skipped)
 	h = HashUtil.mix_i64(h, harvests_completed)
 	h = HashUtil.mix_i64(h, field_cycles_completed)
+	h = HashUtil.mix_i64(h, births)
+	h = HashUtil.mix_i64(h, deaths)
+	h = HashUtil.mix_i64(h, partnerships_formed)
+	h = HashUtil.mix_i64(h, households_dissolved)
+	h = HashUtil.mix_i64(h, lifecycle_ticks)
 	var field: Building = world.building_by_id(WorldMap.B_FIELD)
 	if field != null:
 		h = HashUtil.mix(h, field.field_stage)
@@ -258,6 +276,7 @@ func rebuild_runtime() -> void:
 	if world == null:
 		world = WorldMap.new(config.seed)
 	decisions = DecisionSystem.new(self)
+	lifecycle = LifecycleSystem.new(self)
 
 
 func save_to(path: String) -> Dictionary:

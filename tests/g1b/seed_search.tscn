@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://c7seedsearch0g1b"]
+
+[ext_resource type="Script" path="res://tests/g1b/seed_search.gd" id="1_seed"]
+
+[node name="SeedSearch" type="Node"]
+script = ExtResource("1_seed")

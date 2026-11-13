@@ -17,7 +17,7 @@ static func _test_save_before_decision(ctx: G1aTestContext) -> void:
 	ctx.check(loaded.get("ok", false), "Load fehlgeschlagen")
 	if loaded.get("ok", false):
 		var b: Simulation = loaded["sim"]
-		ctx.check_eq(int(loaded.get("schema", 0)), 2, "Load-Schema ist nicht 2")
+		ctx.check_eq(int(loaded.get("schema", 0)), 3, "Load-Schema ist nicht 3")
 		ctx.check_eq(b.state_hash(), a.state_hash(), "Snapshot nach Load nicht exakt")
 		_advance_chunked(a, G1aTestUtil.abs_time(0, 10, 0), 60)
 		b.advance_to(G1aTestUtil.abs_time(0, 10, 0))
@@ -59,7 +59,7 @@ static func _test_save_version(ctx: G1aTestContext) -> void:
 	var path: String = G1aTestUtil.temp_path("version")
 	var save_info: Dictionary = sim.save_to(path)
 	ctx.check(save_info.get("ok", false), "Save fehlgeschlagen")
-	ctx.check_eq(int(save_info.get("schema", 0)), 2, "Save-Schema ist nicht 2")
+	ctx.check_eq(int(save_info.get("schema", 0)), 3, "Save-Schema ist nicht 3")
 	var original: PackedByteArray = FileAccess.get_file_as_bytes(path)
 	var state_before: int = sim.state_hash()
 	var schema_path: String = G1aTestUtil.temp_path("version_schema")
@@ -69,6 +69,15 @@ static func _test_save_version(ctx: G1aTestContext) -> void:
 	var bad: Dictionary = Simulation.load_from(schema_path)
 	ctx.check(not bad.get("ok", false), "falsche Schema-Version wurde geladen")
 	ctx.check_eq(str(bad.get("error", "")), "unsupported_schema", "Fehlermeldung Schema")
+	# Schema 2 (G1b-Schritt 1) wird sichtbar abgelehnt, nicht still migriert.
+	var schema2_path: String = G1aTestUtil.temp_path("version_schema2")
+	var schema2_bytes: PackedByteArray = original.duplicate()
+	schema2_bytes.encode_u32(4, 2)
+	_write_bytes(schema2_path, schema2_bytes)
+	var bad_schema2: Dictionary = Simulation.load_from(schema2_path)
+	ctx.check(not bad_schema2.get("ok", false), "Schema-2-Save wurde geladen")
+	ctx.check_eq(str(bad_schema2.get("error", "")), "unsupported_schema",
+		"Fehlermeldung Schema 2")
 	# Schema 1 (G1a) wird sichtbar abgelehnt, nicht still migriert.
 	var schema1_path: String = G1aTestUtil.temp_path("version_schema1")
 	var schema1_bytes: PackedByteArray = original.duplicate()
@@ -94,7 +103,7 @@ static func _test_save_version(ctx: G1aTestContext) -> void:
 	ctx.check_eq(str(bad_hash.get("error", "")), "config_hash_mismatch",
 		"Fehlermeldung Config-Hash")
 	ctx.check_eq(sim.state_hash(), state_before, "fehlgeschlagenes Laden mutiert Sim")
-	for p in [path, schema_path, schema1_path, magic_path, hash_path]:
+	for p in [path, schema_path, schema2_path, schema1_path, magic_path, hash_path]:
 		G1aTestUtil.remove_temp(p)
 
 
