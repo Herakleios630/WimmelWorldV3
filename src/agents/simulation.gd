@@ -1,0 +1,185 @@
+class_name Simulation
+extends RefCounted
+
+## Autoritativer G1a-Zustand und Orchestrierung.
+##
+## - Clock/Scheduler/RNG/Agenten/Weltbestand sind die einzigen Zustandsquellen.
+## - Keine View-/Kamera-Abhängigkeit.
+## - Events liegen auf logischen Terminen; advance_to() verarbeitet nur fällige
+##   Events und setzt danach die Zielzeit. Needs bleiben lazy.
+
+const MAX_EVENTS_PER_ADVANCE: int = 500000
+
+var config: SimConfig
+var clock: SimClock
+var world: WorldMap
+var store: AgentStore
+var routes: RouteStore
+var scheduler: EventScheduler
+var rng: RngStreams
+var logs: SimLogs
+var decisions: DecisionSystem
+
+var records: Array = []
+var households: Array = []
+var relationships: Array = []
+
+var grain: int = 0
+var grain_produced: int = 0
+var meals_served: int = 0
+var meals_skipped: int = 0
+
+
+static func create(p_config: SimConfig = null) -> Simulation:
+	var sim: Simulation = Simulation.new()
+	sim.setup_new(p_config if p_config != null else SimConfig.new())
+	return sim
+
+
+func setup_new(p_config: SimConfig) -> void:
+	config = p_config
+	clock = SimClock.new(config.start_time)
+	rng = RngStreams.new(config.seed)
+	world = WorldMap.new(config.seed)
+	store = AgentStore.new()
+	routes = RouteStore.new()
+	scheduler = EventScheduler.new()
+	logs = SimLogs.new()
+	decisions = DecisionSystem.new(self)
+	records = AgentRecords.default_agents()
+	households = AgentRecords.default_households()
+	relationships = AgentRecords.default_relationships()
+	grain = config.start_grain
+	grain_produced = 0
+	meals_served = 0
+	meals_skipped = 0
+	_spawn_initial_agents()
+	logs.emit(clock.now, SimEvent.T_SIM_START, SimEvent.IMPORTANCE_NOTABLE,
+		0, "sim_start", "G1a gestartet", config.seed)
+	logs.emit(clock.now, SimEvent.T_DAY_START, SimEvent.IMPORTANCE_ROUTINE,
+		0, "day_start", "Tag beginnt", clock.day_index())
+	for row in store.count:
+		decisions.on_agent_wake(row)
+	var next_midnight: int = (clock.day_index() + 1) * SimConfig.TICKS_PER_DAY
+	scheduler.push(next_midnight, SimKinds.EVENT_DAY_TICK, 0)
+
+
+func _spawn_initial_agents() -> void:
+	for record in records:
+		var rec: AgentRecord = record
+		var home_point: Vector2 = world.door_point(rec.home_building_id)
+		store.add_agent(rec.id, rec.age_years, rec.role, rec.household_id,
+			rec.home_building_id, rec.job_id, rec.job_kind,
+			home_point.x, home_point.y,
+			config.start_hunger, config.start_energy, config.start_social,
+			clock.now)
+
+
+func advance_to(target_time: int) -> int:
+	if target_time < clock.now:
+		return 0
+	var processed: int = 0
+	while scheduler.size() > 0 and scheduler.peek_time() <= target_time:
+		if not scheduler.pop():
+			break
+		var event_time: int = scheduler.last_time
+		if event_time > clock.now:
+			clock.now = event_time
+		_dispatch(scheduler.last_kind, scheduler.last_payload)
+		processed += 1
+		if processed > MAX_EVENTS_PER_ADVANCE:
+			push_error("event storm guard triggered at t=%d" % clock.now)
+			break
+	clock.now = target_time
+	return processed
+
+
+func _dispatch(kind: int, payload: int) -> void:
+	if kind == SimKinds.EVENT_AGENT_WAKE:
+		var row: int = payload & 0xFFFFFFFF
+		var gen: int = (payload >> 32) & 0xFFFFFFFF
+		if row >= 0 and row < store.count and store.wake_gen[row] == gen:
+			decisions.on_agent_wake(row)
+	elif kind == SimKinds.EVENT_DAY_TICK:
+		logs.emit(clock.now, SimEvent.T_DAY_START, SimEvent.IMPORTANCE_ROUTINE,
+			0, "day_start", "Tag beginnt", clock.day_index())
+		var next_midnight: int = (clock.day_index() + 1) * SimConfig.TICKS_PER_DAY
+		scheduler.push(next_midnight, SimKinds.EVENT_DAY_TICK, 0)
+
+
+func log_event(type: int, importance: int, agent_id: int, template_key: String,
+		text: String = "", data: int = 0) -> SimEvent:
+	return logs.emit(clock.now, type, importance, agent_id, template_key, text, data)
+
+
+func request_wake_by_id(agent_id: int, at_time: int) -> void:
+	var row: int = store.row_for_id(agent_id)
+	if row >= 0:
+		decisions.request_wake(row, at_time)
+
+
+func agent_position_at(agent_id: int, t: int) -> Vector2:
+	var row: int = store.row_for_id(agent_id)
+	if row < 0:
+		return Vector2.ZERO
+	return decisions.position_at(row, t)
+
+
+func current_position(row: int) -> Vector2:
+	return decisions.position_at(row, clock.now)
+
+
+func day_index() -> int:
+	return clock.day_index()
+
+
+func count_alive() -> int:
+	var n: int = 0
+	for row in store.count:
+		if store.alive[row] != 0:
+			n += 1
+	return n
+
+
+func state_hash() -> int:
+	var h: int = HashUtil.FNV_OFFSET
+	h = HashUtil.mix(h, config.config_hash())
+	h = HashUtil.mix_i64(h, clock.now)
+	h = HashUtil.mix(h, scheduler.state_hash())
+	h = HashUtil.mix(h, rng.state_hash())
+	h = HashUtil.mix(h, store.state_hash(clock.now))
+	h = HashUtil.mix(h, routes.state_hash())
+	h = HashUtil.mix_i64(h, grain)
+	h = HashUtil.mix_i64(h, grain_produced)
+	h = HashUtil.mix_i64(h, meals_served)
+	h = HashUtil.mix_i64(h, meals_skipped)
+	for record in records:
+		h = HashUtil.mix(h, (record as AgentRecord).state_hash())
+	for household in households:
+		h = HashUtil.mix(h, (household as HouseholdRecord).state_hash())
+	for relationship in relationships:
+		h = HashUtil.mix(h, (relationship as RelationshipRecord).state_hash())
+	return h
+
+
+func event_hash() -> int:
+	return logs.debug_hash()
+
+
+func chronicle_hash() -> int:
+	return logs.chronicle_hash()
+
+
+## Wird nach einem Save-Restore aufgerufen: abgeleitete Laufzeitobjekte binden.
+func rebuild_runtime() -> void:
+	if world == null:
+		world = WorldMap.new(config.seed)
+	decisions = DecisionSystem.new(self)
+
+
+func save_to(path: String) -> Dictionary:
+	return SimSave.save_simulation(self, path)
+
+
+static func load_from(path: String) -> Dictionary:
+	return SimSave.load_simulation(path)

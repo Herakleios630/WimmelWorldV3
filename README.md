@@ -1,7 +1,7 @@
 # WimmelWorld V3
 
-Status: **G0.5 bestanden (2026-11-13); G1a bereit, Freigabe offen.**  
-Der G0.5-Spike ist abgeschlossen; Gameplay ist noch nicht gestartet.
+Status: **G1a bestanden (Review 2026-11-13); G1b bereit, Freigabe offen.**  
+G0.5 und G1a sind abgeschlossen; G1b ist der nächste Gate.
 
 ## Was V3 ist
 
@@ -29,6 +29,8 @@ Der G0.5-Spike ist abgeschlossen; Gameplay ist noch nicht gestartet.
 | `docs/g0.5/v3-g0.5-results.md` | G0.5-Messwerte, C#-Vergleich, Portentscheid |
 | `docs/v3-project-structure.md` | Repo-/Toolchain-/Test-/Benchmark-Plan |
 | `docs/v3-g1-workpackages.md` | G1-Arbeitspakete und Test-IDs |
+| `docs/g1a/v3-g1a-report.md` | G1a-Implementierung, Tests, Messwerte, Review |
+| `docs/g1a/README.md` | G1a-Test- und Demoanleitung |
 | `docs/v3-g0-review.md` | G0-Review-Checkliste und Freigabe |
 | `docs/reviews/v3-review-2026-11-13.md` | Externes Review und Konsequenzen |
 | `docs/reviews/v3-review-prompt.md` | Prompt für die erste externe Review |
@@ -36,10 +38,13 @@ Der G0.5-Spike ist abgeschlossen; Gameplay ist noch nicht gestartet.
 
 ## Nächster Schritt
 
-1. G0.5-Ergebnis ist bestanden (`docs/g0.5/v3-g0.5-results.md`).
-2. G1a-Freigabe durch den Nutzer.
-3. G1a gemäß `docs/v3-g1-workpackages.md` und Test-IDs starten.
-4. Dann G1b, G2 usw. gemäß Master-Plan.
+1. G0.5 und G1a sind bestanden.
+2. G1b-Freigabe durch den Nutzer.
+3. G1b gemäß `docs/v3-g1-spec.md` starten.
+4. Danach G2 usw. gemäß Master-Plan.
+
+G1a-Demo:
+`& $godot --path C:\coding\WimmelWorld\V3 res://tests/g1a/demo.tscn`
 
 ## Regeln
 
