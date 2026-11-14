@@ -18,7 +18,7 @@ Bezug: `v3-plan.md`, `reviews/v3-review-2026-11-13.md`.
 | R2 | 100k@50x unerreichbar | hoch | mittel | G5a-Stretch verfehlt | 100k@50x Stretch; 100k@10x Pflicht; B-Fallback | beobachtet |
 | R3 | Event-Explosion | mittel | hoch | Events/Frame > Budget | G0.5: 9,52 Need-Wakes/Tag innerhalb 8–10; Batching/Event-Budget; reale Handler in G1a/G2 | beobachtet |
 | R4 | Pfad-/Chunk-Kosten bei 100k | hoch | hoch | G3/G4 Pfad-p95/Speicher über Budget | G0.5: 0,53–0,97 ms p95 ohne Cache, 96,8 % Hit; Chunk/100k in G3/G4 | beobachtet |
-| R5 | G1 zu groß | hoch | hoch | G1a/G1b nicht in Zeit | G1a auf Waypoint/einfachen Speicher/kein Replay reduziert; G1a/G1b formal; klare Nicht-Ziele | beobachtet |
+| R5 | G1 zu groß | hoch | hoch | G1a/G1b nicht in Zeit | G1 abgeschlossen (G1a/G1a.1/G1b 1–3 bestanden); G1a reduziert, G1b gedrittelt | geschlossen |
 | R6 | D-57-Scope frisst Skalierung | mittel | hoch | G2/G3 werden Feature-Gates | G2/G3 nur Stubs; echte Systeme G4/G5 | mitigiert |
 | R7 | Save/Replay fehleranfällig | mittel | hoch | Save/Load-Differenz | versioniertes Binär-Save; stabile IDs; Restore-Tests | offen |
 | R8 | Chronik wird Event-Rauschen | hoch | hoch | Alerts/Log unlesbar | Taxonomie, Importance, Dedup, Digest, Retention | offen |
