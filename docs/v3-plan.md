@@ -1,6 +1,6 @@
 # WimmelWorld V3 — Planung
 
-Status: G2 bestanden (2026-11-14); G3 bereit, Freigabe offen  
+Status: G2 bestanden; B-Spike 100k@150x läuft (A=1x/B=150x)  
 Stand: 2026-11-14  
 Arbeitsmodus: **Nur Analyse und Planung. Kein Code, keine Implementierung, keine Änderung an V1/V2.**
 
@@ -742,6 +742,27 @@ Events und werden in G1a/G2 gemessen.
 **Grenzen:** keine GPU-ms; Render ist eine Marker-Untergrenze; C# ist eine
 Konsolen-App ohne Godot-Interop; keine echte Terrain-/UI-/Chronik-Last.
 
+### 3.23 Zwei Modi: A (1x) und B (150x-Zeitraffer)
+
+- **A / 1x / Cursed Beyond:** Vollsimulation aller Agenten; deterministisch;
+  Save/Replay; keine Simulations-LOD. 100k@1x ist mit ~15–19 Events/Frame
+  performancemäßig machbar.
+- **B / 150x / WimmelWorld standalone:** deterministisches Tiering/Coarse;
+  sichtbarer Zeitraffer; separates Welt-/Save-Modell; nicht replay-äquivalent
+  zu A. Detailtier und Hintergrund-Cadence werden im B-Spike gemessen.
+- **Kein Kamera-LOD** in beiden Modi.
+- **Kalender:** 120-Tage-Jahr mit 30-Tage-Seasons ist das Ziel für den
+  Standalone-Zeitraffer (150x = 12 min/Jahr, 50-Jahre-Leben = 10 h); 30-Tage-
+  Jahr/50x bleibt Fallback. Der B-/Speed-Spike entscheidet, ob 150x bei 100k
+  tragbar ist; 100k@1x A bleibt das Cursed-Beyond-Ziel.
+- **Balancing:** 150x/B ist qualitatives Balancing/Beobachtung; quantitative
+  Balance läuft auf A headless mit denselben Seeds. **A/B-Makro und
+  Ereigniszahlen sollen ähnlich sein; Mikro-Identitäten dürfen abweichen**
+  (z. B. welche Person stirbt, nicht wie viele). Anker-Agenten bleiben
+  erhalten.
+- **Nächster Schritt:** B-Spike mit 100k Records, Detailtier 1k/5k,
+  Hintergrund-Coarse, 150x/200x.
+
 ## 4. Entscheidungsstand
 
 ### 4.1 Runde 1 — entschieden
@@ -850,23 +871,32 @@ Straßen-Knoten; Bürger können lokale Wege bauen. Mehrstufig bleibt Fallback.
 
 #### D-18 — Fidelity-Modell / AI-LOD
 
-**Entschieden:** A starten, B als Fallback. Vollsimulation aller Agenten als
-Start; deterministisches Tiering nur, wenn die Messung 10k@50x oder 100k@10x
-verfehlt. Kamera-LOD ist ausgeschlossen, solange D-19 gilt.
+**Entschieden (2026-11-14):** Zwei getrennte Produkte, zwei Modi.
 
-**B-Vertrag (jetzt definiert):** B ist ein **eigenes deterministisches
-Grobmodell**, keine exakte A-Kopie. Erhalten bleiben Identität, Alter,
-Wohnung, Job, Familie, Lebenszyklus/Tod **innerhalb von B**, Wirtschaftsrolle,
-Politik und Chronik-Events **innerhalb von B**; Save/Replay sind
-B-konsistent. Nicht garantiert sind identische Zeitpunkte, Partnerwahl,
-Jobwechsel oder Todesursachen im Vergleich zu A. Parität bedeutet
-Invarianten/Toleranzen, nicht exakte Emergenz. Einführung nur per ADR,
-Testmatrix und ausdrücklicher Nutzerfreigabe; kein stiller Einsatz.
+- **Cursed Beyond:** läuft immer **1x**, serverautoritativ, **A
+  Vollsimulation**, deterministisch, Save/Replay. Keine Simulations-LOD.
+- **WimmelWorld standalone:** eigener **150x-Zeitraffer** mit **B
+  deterministischem Tiering/Coarse**, sichtbar als „Zeitraffer“ markiert,
+  separates Welt-/Save-Modell. **Nicht replay-äquivalent zu A.**
+- **Getrennte Welten:** 150x schreibt nicht in die autoritative 1x-Welt
+  zurück.
+- 100k@1x mit A ist performancemäßig machbar (~15–19 Events/Frame);
+  100k@150x ist B (A wäre 2.222–2.778 Events/Frame).
+
+**B-Vertrag:** B ist ein eigenes deterministisches Grobmodell, keine exakte
+A-Kopie. Alle 100k behalten Identität, Alter, Wohnung, Job, Familie,
+Lebenszyklus/Tod innerhalb von B, Wirtschaftsrolle, Politik und
+Chronik-Events innerhalb von B. Ein deterministisches Detailtier (Zielgröße
+im Spike messen) wird voll simuliert; der Rest coarse pro Siedlung/Kohorte.
+Tier-Auswahl ist simulationsgetrieben, nicht kameraabhängig; Promotion/
+Demotion mit deterministischem Catch-up. Parität zu A nur über
+Invarianten/Toleranzen, nicht über identische Emergenz. Der Modus ist im UI
+und Save sichtbar; kein stiller Speed-Schalter.
 
 #### D-19 — Kameraunabhängigkeit der Simulation
 
-**Entschieden:** Strikt kameraunabhängig. Simulation liest niemals Kamera,
-Zoom oder Sichtbarkeit; nur das Rendering darf LOD nutzen.
+**Entschieden:** Strikt kameraunabhängig — für A und B. Simulation liest
+niemals Kamera, Zoom oder Sichtbarkeit; nur das Rendering darf LOD nutzen.
 
 ### 4.4 Runde 4 — entschieden
 

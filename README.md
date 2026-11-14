@@ -1,7 +1,7 @@
 # WimmelWorld V3
 
-Status: **G2 bestanden (2026-11-14); G3 bereit, Freigabe offen.**  
-G0.5, G1 und G2 sind abgeschlossen.
+Status: **B-Spike 100k@150x läuft; A=1x/B=150x entschieden.**  
+G0.5, G1 und G2 sind abgeschlossen; der B-Zeitraffer wird jetzt gemessen.
 
 ## Was V3 ist
 
@@ -23,7 +23,8 @@ G0.5, G1 und G2 sind abgeschlossen.
 | `docs/v3-data-model.md` | Entitäten, IDs, Events, Save, Retention, JSON |
 | `docs/v3-benchmark.md` | Zielhardware, 3-Lauf-Protokoll, Szenarien, Budgets |
 | `docs/v3-chronicle.md` | Chronik-Taxonomie, Importance, Pacing, Retention |
-| `docs/v3-fidelity.md` | A/B-Vertrag, preserved/approximated fields |
+| `docs/v3-fidelity.md` | A (1x autoritativ) / B (150x Zeitraffer), preserved/approximated fields |
+| `docs/g3/v3-g3-b-spike.md` | B-Spike: 100k@150x, Detailtier 1k/5k, Coarse-Hintergrund |
 | `docs/v3-risk-register.md` | Risiken R1–R18, Auslöser, Gegenmaßnahmen |
 | `docs/v3-g0.5-spike.md` | Technikspike vor G1 (abgeschlossen) |
 | `docs/g0.5/v3-g0.5-results.md` | G0.5-Messwerte, C#-Vergleich, Portentscheid |
