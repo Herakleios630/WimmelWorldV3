@@ -4,14 +4,23 @@ extends RefCounted
 ## G1b-Konfiguration. Nur autoritative Sim-Parameter.
 ## Kamera, Zoom, Sichtbarkeit und Speed sind bewusst NICHT enthalten.
 
-const SCHEMA_VERSION: int = 4
-const GAME_VERSION: int = 4
+const SCHEMA_VERSION: int = 5
+const GAME_VERSION: int = 5
 
 const TICKS_PER_DAY: int = 86400
 const MINUTES_PER_DAY: int = 1440
 const YEAR_DAYS: int = 30
 const SEASONS: int = 4
 const MAP_SIZE: int = 128
+const MAP_SIZE_G2: int = 384
+
+## G1-Weltprofil (10 Agenten, 128x128) bleibt der unveränderte G1-Default.
+## G2 nutzt explizit SimConfig.g2(): 384x384, 100 Agenten, 20-25 Haushalte.
+const PROFILE_G1: int = 0
+const PROFILE_G2: int = 1
+const G2_TARGET_AGENTS: int = 100
+const G2_TARGET_HOUSEHOLDS: int = 24
+
 const TILE_METERS: float = 1.5
 const PIXELS_PER_TILE: int = 16
 const REAL_SECONDS_PER_DAY_AT_1X: int = 900
@@ -43,6 +52,20 @@ const FIELD_HARVEST_YIELD: int = 220
 
 var seed: int = DEFAULT_SEED
 var start_time: int = DEFAULT_START_TIME
+
+# Welt-/Bevölkerungsprofil. G1-Default bleibt bitgleich zum bestandenen G1.
+var profile: int = PROFILE_G1
+var world_size: int = MAP_SIZE
+var target_agents: int = 10
+var target_households: int = 3
+
+# G2-Pfadbudget. Die Budgets beeinflussen, wann ein Pfad vertagt wird, sind
+# damit autoritativ und Teil des Config-Hashs. Der Cache selbst ist abgeleitet.
+var path_cache_capacity: int = 512
+var path_recalc_budget: int = 2
+var path_lookup_budget: int = 50
+var path_frame_ticks: int = 80
+var map_version: int = 1
 
 # Need-Startwerte (G1-Spec §5). Gesundheit ist ein langsamer Zustand.
 var start_hunger: float = 80.0
@@ -137,6 +160,25 @@ var chronicle_story_max_per_day: int = 7
 var chronicle_alert_max_per_day: int = 20
 
 
+## G2-Profil: gleiche G1b-Regeln, größere Welt/Bevölkerung. Nur die
+## Grain-Kalibrierung skaliert mit der 100er-Bevölkerung (4 Felder statt 1).
+static func g2(seed_value: int = DEFAULT_SEED) -> SimConfig:
+	var c: SimConfig = SimConfig.new()
+	c.seed = seed_value
+	c.profile = PROFILE_G2
+	c.world_size = MAP_SIZE_G2
+	c.target_agents = G2_TARGET_AGENTS
+	c.target_households = G2_TARGET_HOUSEHOLDS
+	c.start_grain = 1200
+	c.field_harvest_yield = 600
+	c.path_cache_capacity = 2048
+	c.path_recalc_budget = 2
+	c.path_lookup_budget = 50
+	c.path_frame_ticks = 80
+	c.map_version = 1
+	return c
+
+
 func config_hash() -> int:
 	var h: int = HashUtil.FNV_OFFSET
 	h = HashUtil.mix(h, SCHEMA_VERSION)
@@ -144,6 +186,15 @@ func config_hash() -> int:
 	h = HashUtil.mix(h, SEASONS)
 	h = HashUtil.mix_i64(h, seed)
 	h = HashUtil.mix_i64(h, start_time)
+	h = HashUtil.mix(h, profile)
+	h = HashUtil.mix(h, world_size)
+	h = HashUtil.mix(h, target_agents)
+	h = HashUtil.mix(h, target_households)
+	h = HashUtil.mix(h, path_cache_capacity)
+	h = HashUtil.mix(h, path_recalc_budget)
+	h = HashUtil.mix(h, path_lookup_budget)
+	h = HashUtil.mix(h, path_frame_ticks)
+	h = HashUtil.mix(h, map_version)
 	h = HashUtil.mix_f64(h, start_hunger)
 	h = HashUtil.mix_f64(h, start_energy)
 	h = HashUtil.mix_f64(h, start_social)

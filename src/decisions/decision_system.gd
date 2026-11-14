@@ -178,6 +178,9 @@ func schedule_next(row: int, now: int) -> void:
 		var t_f: int = _need_wake_time(row, now, NEED_FUN)
 		if t_f > 0 and t_f < best:
 			best = t_f
+	if store.defer_until[row] > now:
+		best = store.defer_until[row]
+	store.defer_until[row] = 0
 	if best <= now:
 		best = now + SimConfig.MIN_WAKE_S
 	store.wake_gen[row] = (store.wake_gen[row] + 1) & 0x7FFFFFFF
@@ -338,15 +341,23 @@ func _home_point(row: int) -> Vector2:
 	return world.clamp_point(base + Vector2((float(row % 4) - 1.5) * 1.2, 0.0))
 
 
+func _field_id_for_row(row: int) -> int:
+	var ids: PackedInt32Array = world.field_ids()
+	if ids.is_empty():
+		return -1
+	return ids[(row + store.home_id[row]) % ids.size()]
+
+
 func _field_point(row: int) -> Vector2:
+	var field_id: int = _field_id_for_row(row)
 	var slot: int = (row * 3) % 5
 	var dx: float = float((slot % 3) - 1) * 3.0
 	var dy: float = (float(slot / 3) - 0.5) * 4.0
-	return world.clamp_point(world.field_work_point + Vector2(dx, dy))
+	return world.clamp_point(world.field_work_point_for(field_id) + Vector2(dx, dy))
 
 
 func _workshop_point(row: int) -> Vector2:
-	var base: Vector2 = world.door_point(WorldMap.B_WORKSHOP)
+	var base: Vector2 = world.door_point(world.workshop_id())
 	return world.clamp_point(base + Vector2(float((row % 3) - 1) * 1.4, 0.0))
 
 
@@ -357,7 +368,7 @@ func _plaza_point(row: int) -> Vector2:
 
 
 func _well_point(row: int) -> Vector2:
-	var base: Vector2 = world.door_point(WorldMap.B_WELL)
+	var base: Vector2 = world.door_point(world.well_id())
 	return world.clamp_point(base + Vector2(float((row % 3) - 1) * 0.8, 0.0))
 
 
@@ -366,16 +377,16 @@ func _resolve_place(row: int, place: int) -> Array:
 	var home_point: Vector2 = _home_point(row)
 	match place:
 		RoleSchedule.PLACE_FIELD:
-			return [WorldMap.B_FIELD, _field_point(row)]
+			return [_field_id_for_row(row), _field_point(row)]
 		RoleSchedule.PLACE_WORKSHOP:
-			return [WorldMap.B_WORKSHOP, _workshop_point(row)]
+			return [world.workshop_id(), _workshop_point(row)]
 		RoleSchedule.PLACE_PLAZA:
-			return [WorldMap.B_WELL, _plaza_point(row)]
+			return [world.well_id(), _plaza_point(row)]
 		RoleSchedule.PLACE_JOB:
 			if store.job_kind[row] == AgentStore.JOB_FIELD:
-				return [WorldMap.B_FIELD, _field_point(row)]
+				return [_field_id_for_row(row), _field_point(row)]
 			if store.job_kind[row] == AgentStore.JOB_WORKSHOP:
-				return [WorldMap.B_WORKSHOP, _workshop_point(row)]
+				return [world.workshop_id(), _workshop_point(row)]
 			return [home_id, home_point]
 		_:
 			return [home_id, home_point]
@@ -412,10 +423,16 @@ func _go_or_act(row: int, act: int, building_id: int, point: Vector2,
 
 
 func _start_travel(row: int, act: int, building_id: int, point: Vector2,
-		source: int, abs_end: int, duration_after: int) -> void:
+		source: int, abs_end: int, duration_after: int) -> bool:
 	var now: int = _now()
 	var start: Vector2 = Vector2(store.pos_x[row], store.pos_y[row])
-	var points: PackedVector2Array = world.find_route(start, point)
+	var points: PackedVector2Array = _host().find_travel_path(start, point)
+	if points.is_empty():
+		if _host().path_was_deferred():
+			store.defer_until[row] = _host().deferred_wake_time()
+		store.activity[row] = AgentStore.ACT_IDLE
+		store.route_id[row] = -1
+		return false
 	var length: float = WorldMap.polyline_length(points)
 	var travel_s: int = maxi(1, int(ceil(length / config.walk_speed)))
 	var arrival: int = now + travel_s
@@ -436,6 +453,7 @@ func _start_travel(row: int, act: int, building_id: int, point: Vector2,
 	store.travel_end_y[row] = point.y
 	_host().log_event(SimEvent.T_TRAVEL_START, SimEvent.IMPORTANCE_ROUTINE,
 		_agent_id(row), "travel_start", "Weg zum Ziel", building_id)
+	return true
 
 
 func _extend_sleep_if_needed(end_time: int, row: int) -> int:
@@ -484,7 +502,7 @@ func _begin_action(row: int, act: int, now: int, end_time: int, source: int) -> 
 		store.work_start[row] = now
 		store.work_end[row] = end_time
 		if store.job_kind[row] == AgentStore.JOB_FIELD:
-			_field_on_work_start()
+			_field_on_work_start(store.target_building_id[row])
 		_host().log_event(SimEvent.T_WORK_START, SimEvent.IMPORTANCE_ROUTINE,
 			agent_id, "work_start", "Arbeit beginnt", store.target_building_id[row])
 	elif act == AgentStore.ACT_EAT:
@@ -513,11 +531,11 @@ func _finish_work(row: int, now: int) -> void:
 		var worked: int = now - store.work_start[row]
 		if worked > 0:
 			if store.job_kind[row] == AgentStore.JOB_FIELD:
-				_field_add_work(worked)
+				_field_add_work(store.target_building_id[row], worked)
 			else:
 				store.work_accum[row] += worked
 		store.work_start[row] = -1
-	var field_stage: int = _field_stage()
+	var field_stage: int = _field_stage(store.target_building_id[row])
 	_host().log_event(SimEvent.T_WORK_END, SimEvent.IMPORTANCE_NOTABLE,
 		_agent_id(row), "work_end", "Arbeit beendet", field_stage)
 	store.work_end[row] = -1
@@ -607,36 +625,36 @@ func _start_need_action(row: int, now: int, need: int) -> void:
 				-1, nap_s)
 	elif need == NEED_SOCIAL:
 		var plaza: Vector2 = _plaza_point(row)
-		store.target_building_id[row] = WorldMap.B_WELL
+		store.target_building_id[row] = world.well_id()
 		store.target_x[row] = plaza.x
 		store.target_y[row] = plaza.y
 		if Vector2(store.pos_x[row], store.pos_y[row]).distance_to(plaza) <= NEAR_DISTANCE:
 			_begin_action(row, AgentStore.ACT_SOCIAL, now,
 				now + SimConfig.SOCIAL_DURATION_S, SOURCE_NEED)
 		else:
-			_start_travel(row, AgentStore.ACT_SOCIAL, WorldMap.B_WELL, plaza,
+			_start_travel(row, AgentStore.ACT_SOCIAL, world.well_id(), plaza,
 				SOURCE_NEED, -1, SimConfig.SOCIAL_DURATION_S)
 	elif need == NEED_HYGIENE:
 		var well: Vector2 = _well_point(row)
-		store.target_building_id[row] = WorldMap.B_WELL
+		store.target_building_id[row] = world.well_id()
 		store.target_x[row] = well.x
 		store.target_y[row] = well.y
 		if Vector2(store.pos_x[row], store.pos_y[row]).distance_to(well) <= NEAR_DISTANCE:
 			_begin_action(row, AgentStore.ACT_HYGIENE, now,
 				now + SimConfig.HYGIENE_DURATION_S, SOURCE_NEED)
 		else:
-			_start_travel(row, AgentStore.ACT_HYGIENE, WorldMap.B_WELL, well,
+			_start_travel(row, AgentStore.ACT_HYGIENE, world.well_id(), well,
 				SOURCE_NEED, -1, SimConfig.HYGIENE_DURATION_S)
 	elif need == NEED_FUN:
 		var leisure: Vector2 = _plaza_point(row)
-		store.target_building_id[row] = WorldMap.B_WELL
+		store.target_building_id[row] = world.well_id()
 		store.target_x[row] = leisure.x
 		store.target_y[row] = leisure.y
 		if Vector2(store.pos_x[row], store.pos_y[row]).distance_to(leisure) <= NEAR_DISTANCE:
 			_begin_action(row, AgentStore.ACT_PLAY, now,
 				now + SimConfig.FUN_DURATION_S, SOURCE_NEED)
 		else:
-			_start_travel(row, AgentStore.ACT_PLAY, WorldMap.B_WELL, leisure,
+			_start_travel(row, AgentStore.ACT_PLAY, world.well_id(), leisure,
 				SOURCE_NEED, -1, SimConfig.FUN_DURATION_S)
 
 
@@ -647,12 +665,8 @@ func _nap_duration(row: int) -> int:
 	return clampi(seconds, 1800, MAX_NAP_S)
 
 
-func _field() -> Building:
-	return world.building_by_id(WorldMap.B_FIELD)
-
-
-func _field_stage() -> int:
-	var field: Building = _field()
+func _field_stage(field_id: int) -> int:
+	var field: Building = world.building_by_id(field_id)
 	return field.field_stage if field != null else -1
 
 
@@ -665,9 +679,9 @@ func _field_set_stage(field: Building, stage: int) -> void:
 ## Beim Arbeitsbeginn werden FALLOW/PLOWED/RIPE in den jeweiligen
 ## Arbeitszustand überführt. Der Zustand ist damit sichtbar, bevor Fortschritt
 ## entsteht; es gibt keinen Instant-Abschluss.
-func _field_on_work_start() -> void:
-	var field: Building = _field()
-	if field == null:
+func _field_on_work_start(field_id: int) -> void:
+	var field: Building = world.building_by_id(field_id)
+	if field == null or field.kind != Building.KIND_FIELD:
 		return
 	match field.field_stage:
 		Building.FIELD_FALLOW:
@@ -678,9 +692,9 @@ func _field_on_work_start() -> void:
 			_field_set_stage(field, Building.FIELD_HARVESTING)
 
 
-func _field_add_work(seconds: int) -> void:
-	var field: Building = _field()
-	if field == null or seconds <= 0:
+func _field_add_work(field_id: int, seconds: int) -> void:
+	var field: Building = world.building_by_id(field_id)
+	if field == null or field.kind != Building.KIND_FIELD or seconds <= 0:
 		return
 	var required: int = 0
 	match field.field_stage:
@@ -710,8 +724,9 @@ func _field_add_work(seconds: int) -> void:
 			_field_set_stage(field, Building.FIELD_GROWING)
 			field.field_growth_end = _now() + config.field_grow_s
 			field.field_growth_gen += 1
+			var payload: int = (field.id << 32) | (field.field_growth_gen & 0xFFFFFFFF)
 			scheduler.push(field.field_growth_end, SimKinds.EVENT_FIELD_TICK,
-				field.field_growth_gen)
+				payload)
 		Building.FIELD_HARVESTING:
 			var yield_grain: int = config.field_harvest_yield
 			var host_h = _host()
@@ -727,8 +742,9 @@ func _field_add_work(seconds: int) -> void:
 			_field_set_stage(field, Building.FIELD_FALLOW)
 
 
-func on_field_tick(gen: int) -> void:
-	var field: Building = _field()
+func on_field_tick(field_id: int, gen: int) -> void:
+	var resolved_id: int = field_id if field_id > 0 else _field_id_for_row(0)
+	var field: Building = world.building_by_id(resolved_id)
 	if field == null:
 		return
 	if field.field_stage != Building.FIELD_GROWING:
@@ -740,6 +756,22 @@ func on_field_tick(gen: int) -> void:
 	_field_set_stage(field, Building.FIELD_RIPE)
 	_host().log_event(SimEvent.T_FIELD_RIPE, SimEvent.IMPORTANCE_NOTABLE,
 		0, "field_ripe", "Feld ist reif", field.field_growth_end)
+
+
+## Punkte für das deterministische Cache-Prewarming. Nur Lesen, keine
+## Simulationseffekte; der Pfad-Cache bleibt abgeleitet.
+func warmup_points(row: int) -> PackedVector2Array:
+	var out: PackedVector2Array = PackedVector2Array()
+	out.append(Vector2(store.pos_x[row], store.pos_y[row]))
+	out.append(_home_point(row))
+	out.append(_field_point(row))
+	out.append(_workshop_point(row))
+	out.append(_plaza_point(row))
+	out.append(_well_point(row))
+	if store.route_id[row] >= 0:
+		out.append(Vector2(store.travel_start_x[row], store.travel_start_y[row]))
+		out.append(Vector2(store.travel_end_x[row], store.travel_end_y[row]))
+	return out
 
 
 ## Position zur Sim-Zeit t. Reine Geometrie, keine Frame-Abhängigkeit.

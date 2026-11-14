@@ -34,6 +34,7 @@ func configure(p_sim: Simulation, p_view_state: ViewState) -> void:
 		_build()
 		_built = true
 	_populate_agent_filter()
+	_populate_household_filter()
 	refresh(sim, true)
 
 
@@ -96,8 +97,10 @@ func _build() -> void:
 	_household_filter = OptionButton.new()
 	_household_filter.custom_minimum_size.x = 100
 	_household_filter.add_item("Alle Haushalte", 0)
-	for h in [1, 2, 3]:
-		_household_filter.add_item("H%d" % h, h)
+	if sim != null:
+		for household in sim.households:
+			var h: HouseholdRecord = household
+			_household_filter.add_item("H%d" % h.id, h.id)
 	_household_filter.item_selected.connect(_on_filter_changed)
 	filters.add_child(_household_filter)
 	var filters2: HBoxContainer = HBoxContainer.new()
@@ -178,6 +181,23 @@ func _populate_agent_filter() -> void:
 		for i in _agent_filter.item_count:
 			if _agent_filter.get_item_id(i) == view_state.chronicle_filter_agent_id:
 				_agent_filter.select(i)
+				break
+
+
+func _populate_household_filter() -> void:
+	if _household_filter == null:
+		return
+	_household_filter.clear()
+	_household_filter.add_item("Alle Haushalte", 0)
+	if sim == null:
+		return
+	for household in sim.households:
+		var h: HouseholdRecord = household
+		_household_filter.add_item("H%d" % h.id, h.id)
+	if view_state != null and view_state.chronicle_filter_household_id > 0:
+		for i in _household_filter.item_count:
+			if _household_filter.get_item_id(i) == view_state.chronicle_filter_household_id:
+				_household_filter.select(i)
 				break
 
 

@@ -71,7 +71,7 @@ static func _test_arrival(ctx: G1aTestContext) -> void:
 
 
 static func _test_waypoint(ctx: G1aTestContext) -> void:
-	ctx.begin("T-MOVE-03", "Waypoint-Bewegung, kein A*/Cache-Zwang")
+	ctx.begin("T-MOVE-03", "G1-Waypoints unverändert, G2-A*/Cache getrennt")
 	var world: WorldMap = WorldMap.new(1337)
 	var route: PackedVector2Array = world.find_route(
 		world.door_point(WorldMap.B_HOUSE_H1), world.field_work_point)
@@ -83,16 +83,20 @@ static func _test_waypoint(ctx: G1aTestContext) -> void:
 	if sim.store.route_id[row] >= 0:
 		var pts: PackedVector2Array = sim.routes.get_points(sim.store.route_id[row])
 		ctx.check(pts.size() >= 3, "Agentenroute hat keine Wegpunkte")
-	var files: PackedStringArray = PackedStringArray()
-	for dir_path in ["res://src/navigation", "res://src/decisions"]:
-		var dir: DirAccess = DirAccess.open(dir_path)
-		if dir != null:
-			for file_name in dir.get_files():
-				if file_name.ends_with(".gd"):
-					files.append(dir_path + "/" + file_name)
-	var no_astar: bool = true
-	for path in files:
-		var text: String = G1aTestUtil.read_text(path)
-		if text.contains("AStar") or text.contains("astar") or text.contains("a_star"):
-			no_astar = false
-	ctx.check(no_astar, "A*-Referenz in G1a-Navigation/Entscheidungen")
+	# G2 ergänzt A*/Cache als eigenes Modul; der G1-Default bleibt beim
+	# Waypoint-Graphen. Der Test prüft beide Pfade getrennt (Erweiterung,
+	# keine Abschwächung der G1-Routenprüfung).
+	ctx.check(FileAccess.file_exists("res://src/navigation/path_finder.gd"),
+		"G2-PathFinder fehlt")
+	var g1_sim: Simulation = G1aTestUtil.new_sim()
+	ctx.check(g1_sim.pathfinder == null, "G1-Default nutzt fälschlich G2-A*")
+	var g2_world: WorldMap = WorldMap.new(1337, SimConfig.PROFILE_G2)
+	var pf: PathFinder = PathFinder.new(g2_world, 1, 64, 100, 100)
+	var start: Vector2 = g2_world.door_point(g2_world.house_ids()[0])
+	var goal: Vector2 = g2_world.field_work_point_for(g2_world.field_ids()[0])
+	pf.prewarm(start, goal)
+	var p_a: PackedVector2Array = pf.request_path(start, goal)
+	var p_b: PackedVector2Array = pf.request_path(start, goal)
+	ctx.check(p_a.size() >= 2 and p_a.size() == p_b.size(),
+		"G2-A*/Cache liefert keinen stabilen Pfad")
+	ctx.check(pf.cache_hits >= 1, "G2-Pfad-Cache ohne Hit")

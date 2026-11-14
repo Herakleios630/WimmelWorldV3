@@ -6,6 +6,7 @@ const KIND_FIELD: int = 1
 const KIND_GRANARY: int = 2
 const KIND_WELL: int = 3
 const KIND_WORKSHOP: int = 4
+const KIND_BARN: int = 5
 
 ## Voller Feldzyklus (G1b): FALLOW -> PLOWING -> PLOWED -> SOWING -> SOWN
 ## -> GROWING -> RIPE -> HARVESTING -> FALLOW. SOWN ist der Aussaat-Abschluss;
@@ -55,7 +56,8 @@ static func kind_name(p_kind: int) -> String:
 		KIND_FIELD: return "Feld"
 		KIND_GRANARY: return "Kornspeicher"
 		KIND_WELL: return "Brunnen"
-		KIND_WORKSHOP: return "Scheune/Werkstatt"
+		KIND_WORKSHOP: return "Werkstatt"
+		KIND_BARN: return "Scheune"
 	return "?"
 
 

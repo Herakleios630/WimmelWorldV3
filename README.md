@@ -1,7 +1,7 @@
 # WimmelWorld V3
 
-Status: **G1 abgeschlossen (2026-11-14); G2 bereit, Freigabe offen.**  
-G0.5, G1a, G1a.1 und G1b Schritte 1–3 sind bestanden.
+Status: **G2 bestanden (2026-11-14); G3 bereit, Freigabe offen.**  
+G0.5, G1 und G2 sind abgeschlossen.
 
 ## Was V3 ist
 
@@ -35,6 +35,9 @@ G0.5, G1a, G1a.1 und G1b Schritte 1–3 sind bestanden.
 | `docs/g1b/v3-g1b-step2-report.md` | G1b Schritt 2: Lebenszyklus, Demografie, Haushalte |
 | `docs/g1b/v3-g1b-step3-report.md` | G1b Schritt 3: Chronik, Beobachtungs-UI, Replay |
 | `docs/g1b/README.md` | G1b-Testanleitung Schritt 1–3 |
+| `docs/g2/v3-g2-spec.md` | G2: 100-Agenten-Bauerschaft, A*, Batching, 30 Tage |
+| `docs/g2/v3-g2-report.md` | G2: Implementierung, Tests, Performance, Review |
+| `docs/g2/README.md` | G2-Test-/Demoanleitung |
 | `docs/v3-g0-review.md` | G0-Review-Checkliste und Freigabe |
 | `docs/reviews/v3-review-2026-11-13.md` | Externes Review und Konsequenzen |
 | `docs/reviews/v3-review-prompt.md` | Prompt für die erste externe Review |

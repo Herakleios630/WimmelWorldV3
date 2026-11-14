@@ -67,8 +67,9 @@ func _zoom_at(_screen_pos: Vector2, factor: float) -> void:
 
 func _clamp_position() -> void:
 	var half: Vector2 = get_viewport_rect().size * 0.5 / zoom.x
-	var map_size: Vector2 = Vector2(WorldMap.SIZE * SimConfig.PIXELS_PER_TILE,
-		WorldMap.SIZE * SimConfig.PIXELS_PER_TILE)
+	var world_tiles: int = sim.world.size if sim != null else WorldMap.SIZE
+	var map_size: Vector2 = Vector2(world_tiles * SimConfig.PIXELS_PER_TILE,
+		world_tiles * SimConfig.PIXELS_PER_TILE)
 	var min_p: Vector2 = half
 	var max_p: Vector2 = map_size - half
 	if min_p.x > max_p.x:

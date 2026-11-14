@@ -13,6 +13,7 @@ var view_state: ViewState
 var _time_label: Label
 var _grain_label: Label
 var _status_label: Label
+var _stub_label: Label
 var _inspector_title: Label
 var _inspector_body: RichTextLabel
 var _event_log: RichTextLabel
@@ -59,6 +60,12 @@ func _build() -> void:
 	_grain_label.custom_minimum_size.x = 470
 	_grain_label.add_theme_font_size_override("font_size", 16)
 	top_box.add_child(_grain_label)
+	_stub_label = Label.new()
+	_stub_label.text = D57Stubs.hud_line()
+	_stub_label.add_theme_font_size_override("font_size", 11)
+	_stub_label.modulate = Color(0.72, 0.72, 0.66, 0.9)
+	_stub_label.visible = false
+	top_box.add_child(_stub_label)
 	_pause_button = Button.new()
 	_pause_button.text = "Pause"
 	_pause_button.custom_minimum_size.x = 84
@@ -209,14 +216,20 @@ func refresh(sim: Simulation) -> void:
 		b.modulate = Color(1.0, 0.9, 0.55) if (speed == view_state.speed and not view_state.paused) else Color.WHITE
 	if sim == null:
 		return
+	_stub_label.visible = sim.config.profile == SimConfig.PROFILE_G2
 	var now_ms: int = Time.get_ticks_msec()
 	if now_ms - _last_refresh_ms < 100:
 		return
 	_last_refresh_ms = now_ms
 	_time_label.text = "%s · %s   %dx" % [sim.clock.time_string(),
 		_season_name(sim.clock.day_index()), view_state.speed]
-	var field: Building = sim.world.building_by_id(WorldMap.B_FIELD)
-	var stage_text: String = Building.field_stage_name(field.field_stage) if field != null else "?"
+	var field_ids: PackedInt32Array = sim.world.field_ids()
+	var field: Building = sim.world.building_by_id(field_ids[0]) if field_ids.size() > 0 else null
+	var stage_text: String = "?"
+	if field != null:
+		stage_text = Building.field_stage_name(field.field_stage)
+		if field_ids.size() > 1:
+			stage_text += " (%d Felder)" % field_ids.size()
 	_grain_label.text = "Grain: %d (+%d geerntet) · Feld: %s · Jahr %d" % [
 		sim.grain, sim.grain_harvested, stage_text, sim.year_index + 1]
 	if view_state.selected_agent_id > 0:

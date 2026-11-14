@@ -9,8 +9,8 @@ extends RefCounted
 ##         PAYLOAD_SIZE u64
 
 const MAGIC: int = 0x57473141
-const SCHEMA_VERSION: int = 4
-const GAME_VERSION: int = 4
+const SCHEMA_VERSION: int = 5
+const GAME_VERSION: int = 5
 const HEADER_SIZE: int = 28
 const MAX_ARRAY: int = 2000000
 
@@ -90,7 +90,7 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 	sim.rng = RngStreams.new(config.seed)
 	for i in RngStreams.NAMES.size():
 		(sim.rng.streams[i] as RngStream).state = reader.i64()
-	sim.world = WorldMap.new(config.seed)
+	sim.world = WorldMap.create_for_config(config)
 	sim.store = _read_store(reader)
 	if not reader.ok:
 		return {"ok": false, "error": reader.error}
@@ -109,16 +109,21 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 	sim.partnerships_formed = reader.i64()
 	sim.households_dissolved = reader.i64()
 	sim.lifecycle_ticks = reader.i64()
-	var field: Building = sim.world.building_by_id(WorldMap.B_FIELD)
-	var field_stage: int = reader.i32()
-	var field_work_s: int = reader.i64()
-	var field_growth_end: int = reader.i64()
-	var field_growth_gen: int = reader.i32()
-	if field != null:
-		field.field_stage = field_stage
-		field.field_work_s = field_work_s
-		field.field_growth_end = field_growth_end
-		field.field_growth_gen = field_growth_gen
+	var field_count: int = reader.u32()
+	if field_count < 0 or field_count > 16:
+		return {"ok": false, "error": "bad_field_count"}
+	for _i in field_count:
+		var field_id: int = reader.i32()
+		var field_stage: int = reader.i32()
+		var field_work_s: int = reader.i64()
+		var field_growth_end: int = reader.i64()
+		var field_growth_gen: int = reader.i32()
+		var field: Building = sim.world.building_by_id(field_id)
+		if field != null:
+			field.field_stage = field_stage
+			field.field_work_s = field_work_s
+			field.field_growth_end = field_growth_end
+			field.field_growth_gen = field_growth_gen
 	sim.year_index = reader.i64()
 	sim.year_start_grain = reader.i64()
 	sim.year_grain_produced = reader.i64()
@@ -161,6 +166,15 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 	var config: SimConfig = sim.config
 	w.i64(config.seed)
 	w.i64(config.start_time)
+	w.i32(config.profile)
+	w.i32(config.world_size)
+	w.i32(config.target_agents)
+	w.i32(config.target_households)
+	w.i32(config.path_cache_capacity)
+	w.i32(config.path_recalc_budget)
+	w.i32(config.path_lookup_budget)
+	w.i32(config.path_frame_ticks)
+	w.i32(config.map_version)
 	w.f64(config.start_hunger)
 	w.f64(config.start_energy)
 	w.f64(config.start_social)
@@ -253,11 +267,15 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 	w.i64(sim.partnerships_formed)
 	w.i64(sim.households_dissolved)
 	w.i64(sim.lifecycle_ticks)
-	var field: Building = sim.world.building_by_id(WorldMap.B_FIELD)
-	w.i32(field.field_stage if field != null else 0)
-	w.i64(field.field_work_s if field != null else 0)
-	w.i64(field.field_growth_end if field != null else 0)
-	w.i32(field.field_growth_gen if field != null else 0)
+	var field_ids: PackedInt32Array = sim.world.field_ids()
+	w.u32(field_ids.size())
+	for field_id in field_ids:
+		var field: Building = sim.world.building_by_id(field_id)
+		w.i32(field_id)
+		w.i32(field.field_stage if field != null else 0)
+		w.i64(field.field_work_s if field != null else 0)
+		w.i64(field.field_growth_end if field != null else 0)
+		w.i32(field.field_growth_gen if field != null else 0)
 	w.i64(sim.year_index)
 	w.i64(sim.year_start_grain)
 	w.i64(sim.year_grain_produced)
@@ -320,6 +338,7 @@ static func _write_store(w: ByteWriter, store: AgentStore) -> void:
 	_write_f64_array(w, store.travel_end_y, store.count)
 	_write_i32_array(w, store.route_id, store.count)
 	_write_i32_array(w, store.wake_gen, store.count)
+	_write_i64_array(w, store.defer_until, store.count)
 	_write_i64_array(w, store.next_event, store.count)
 	_write_i64_array(w, store.need_time, store.count)
 	_write_f64_array(w, store.hunger, store.count)
@@ -371,6 +390,7 @@ static func _read_store(r: ByteReader) -> AgentStore:
 	store.travel_end_y = _read_f64_array(r)
 	store.route_id = _read_i32_array(r)
 	store.wake_gen = _read_i32_array(r)
+	store.defer_until = _read_i64_array(r)
 	store.next_event = _read_i64_array(r)
 	store.need_time = _read_i64_array(r)
 	store.hunger = _read_f64_array(r)
@@ -515,6 +535,9 @@ static func _read_relationships(r: ByteReader) -> Array:
 
 static func _write_logs(w: ByteWriter, logs: SimLogs) -> void:
 	w.i64(logs.next_event_id)
+	# G2: Debug-Log ist bounded (SimLogs.DEBUG_CAPACITY), aber weiterhin im Save,
+	# weil G1b-Event-Hash-Tests ihn als Historie nutzen. G3-Auflage: Debug-Log
+	# vom Save entkoppeln und Tests auf state_hash/chronicle_hash umstellen.
 	w.u32(logs.debug_events.size())
 	for event in logs.debug_events:
 		_write_event(w, event)
@@ -589,6 +612,15 @@ static func _read_config(r: ByteReader) -> SimConfig:
 	var config: SimConfig = SimConfig.new()
 	config.seed = r.i64()
 	config.start_time = r.i64()
+	config.profile = r.i32()
+	config.world_size = r.i32()
+	config.target_agents = r.i32()
+	config.target_households = r.i32()
+	config.path_cache_capacity = r.i32()
+	config.path_recalc_budget = r.i32()
+	config.path_lookup_budget = r.i32()
+	config.path_frame_ticks = r.i32()
+	config.map_version = r.i32()
 	config.start_hunger = r.f64()
 	config.start_energy = r.f64()
 	config.start_social = r.f64()

@@ -22,7 +22,7 @@ Bezug: `v3-plan.md`, `reviews/v3-review-2026-11-13.md`.
 | R6 | D-57-Scope frisst Skalierung | mittel | hoch | G2/G3 werden Feature-Gates | G2/G3 nur Stubs; echte Systeme G4/G5 | mitigiert |
 | R7 | Save/Replay fehleranfällig | mittel | hoch | Save/Load-Differenz | versioniertes Binär-Save; stabile IDs; Restore-Tests | offen |
 | R8 | Chronik wird Event-Rauschen | hoch | hoch | Alerts/Log unlesbar | Taxonomie, Importance, Dedup, Digest, Retention | offen |
-| R9 | Fehlende Retention/Save-Größe | mittel | hoch | Save/Log explodiert | Retention-Politik; Budget in G0.5/G2; Summaries | offen |
+| R9 | Fehlende Retention/Save-Größe | mittel | hoch | G2-Save 1,9 MB, Debug-Log dominiert | G3: Debug-Log vom Save entkoppeln, Save-Budget, Tests auf state/chronicle_hash | beobachtet |
 | R10 | Plan-/Doku-Drift | hoch | hoch | widersprüchliche Entscheidungen | Master + G0-Artefakte; Status final/provisional; Review-Checkliste | offen |
 | R11 | KI-Prozess/Monolithen | mittel | hoch | Datei > 1.000 Zeilen, Parallelwahrheit | PM-Review; kleine Aufträge; keine Subagenten-Designentscheidungen | offen |
 | R12 | B wird stiller Qualitätsverlust | mittel | hoch | B ohne Vertrag/Freigabe | B-Vertrag; ADR; Paritätstests; Nutzerfreigabe | mitigiert |

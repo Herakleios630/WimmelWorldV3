@@ -26,7 +26,10 @@ func _draw() -> void:
 		return
 	var positions: Dictionary = {}
 	var x_step: float = 178.0
-	var y_step: float = 58.0
+	var max_rows: int = 1
+	for generation_nodes in generations:
+		max_rows = maxi(max_rows, (generation_nodes as Array).size())
+	var y_step: float = clampf(410.0 / float(max_rows), 9.0, 58.0)
 	for gen_idx in generations.size():
 		var generation_nodes: Array = generations[gen_idx]
 		for row_idx in generation_nodes.size():

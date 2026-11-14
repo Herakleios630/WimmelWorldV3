@@ -10,6 +10,7 @@ var sim: Simulation
 var view_state: ViewState
 var _terrain_texture: ImageTexture
 var _terrain_seed: int = -1
+var _terrain_world_size: int = -1
 var _font: Font
 
 const AGENT_COLORS: Array = [
@@ -28,15 +29,25 @@ func _ready() -> void:
 func configure(p_sim: Simulation, p_view_state: ViewState) -> void:
 	sim = p_sim
 	view_state = p_view_state
-	if sim != null and _terrain_seed != sim.config.seed:
+	if sim != null and (_terrain_seed != sim.config.seed
+			or _terrain_world_size != sim.world.size):
 		_build_terrain()
 	queue_redraw()
 
 
 func _build_terrain() -> void:
-	var size: int = WorldMap.SIZE
+	var size: int = sim.world.size
 	var img: Image = Image.create(size, size, false, Image.FORMAT_RGBA8)
-	var field: Building = sim.world.building_by_id(WorldMap.B_FIELD)
+	var field_tiles: PackedByteArray = PackedByteArray()
+	field_tiles.resize(size * size)
+	for field_id in sim.world.field_ids():
+		var field: Building = sim.world.building_by_id(field_id)
+		if field == null:
+			continue
+		for y in range(field.rect.position.y, field.rect.position.y + field.rect.size.y):
+			for x in range(field.rect.position.x, field.rect.position.x + field.rect.size.x):
+				if x >= 0 and x < size and y >= 0 and y < size:
+					field_tiles[y * size + x] = 1
 	for y in size:
 		for x in size:
 			var c: Color
@@ -44,7 +55,7 @@ func _build_terrain() -> void:
 				c = Color(0.55, 0.46, 0.33)
 				if (x + y) % 7 == 0:
 					c = c.darkened(0.06)
-			elif field != null and field.has_tile(x, y):
+			elif field_tiles[y * size + x] != 0:
 				c = Color(0.58, 0.62, 0.30)
 				if y % 3 == 0:
 					c = c.darkened(0.10)
@@ -57,6 +68,7 @@ func _build_terrain() -> void:
 			img.set_pixel(x, y, c)
 	_terrain_texture = ImageTexture.create_from_image(img)
 	_terrain_seed = sim.config.seed
+	_terrain_world_size = size
 
 
 func _process(_delta: float) -> void:
@@ -68,7 +80,7 @@ func _draw() -> void:
 		return
 	if _terrain_texture != null:
 		draw_texture_rect(_terrain_texture,
-			Rect2(0, 0, WorldMap.SIZE * TILE_PX, WorldMap.SIZE * TILE_PX), false)
+			Rect2(0, 0, sim.world.size * TILE_PX, sim.world.size * TILE_PX), false)
 	_draw_field_details()
 	_draw_buildings()
 	_draw_trees()
@@ -82,25 +94,40 @@ func _tile_rect(rect: Rect2i) -> Rect2:
 
 
 func _draw_field_details() -> void:
-	var field: Building = sim.world.building_by_id(WorldMap.B_FIELD)
-	if field == null:
-		return
-	var r: Rect2 = _tile_rect(field.rect)
-	draw_rect(r, Color(0.30, 0.36, 0.14), false, 2.0)
-	for i in range(1, field.rect.size.y, 3):
-		var y: float = r.position.y + i * TILE_PX
-		draw_line(Vector2(r.position.x + 2, y), Vector2(r.end.x - 2, y),
-			Color(0.42, 0.46, 0.20), 1.0)
-	# Ein paar sichtbare Reihen.
-	for i in range(2, field.rect.size.x, 4):
-		var x: float = r.position.x + i * TILE_PX
-		draw_line(Vector2(x, r.position.y + 4), Vector2(x, r.end.y - 4),
-			Color(0.46, 0.50, 0.22, 0.7), 1.0)
+	var visible: Rect2 = _visible_tiles()
+	for field_id in sim.world.field_ids():
+		var field: Building = sim.world.building_by_id(field_id)
+		if field == null or not visible.intersects(field.rect):
+			continue
+		var r: Rect2 = _tile_rect(field.rect)
+		draw_rect(r, Color(0.30, 0.36, 0.14), false, 2.0)
+		for i in range(1, field.rect.size.y, 3):
+			var y: float = r.position.y + i * TILE_PX
+			draw_line(Vector2(r.position.x + 2, y), Vector2(r.end.x - 2, y),
+				Color(0.42, 0.46, 0.20), 1.0)
+		# Ein paar sichtbare Reihen.
+		for i in range(2, field.rect.size.x, 4):
+			var x: float = r.position.x + i * TILE_PX
+			draw_line(Vector2(x, r.position.y + 4), Vector2(x, r.end.y - 4),
+				Color(0.46, 0.50, 0.22, 0.7), 1.0)
+
+
+func _visible_tiles() -> Rect2:
+	if view_state == null:
+		return Rect2(0, 0, sim.world.size, sim.world.size)
+	var viewport: Vector2 = get_viewport_rect().size
+	var z: float = maxf(0.15, view_state.zoom)
+	var half: Vector2 = viewport * 0.5 / (z * float(TILE_PX))
+	return Rect2(view_state.camera_position - half - Vector2(4, 4),
+		half * 2.0 + Vector2(8, 8))
 
 
 func _draw_buildings() -> void:
+	var visible: Rect2 = _visible_tiles()
 	for building in sim.world.buildings:
 		var b: Building = building
+		if not visible.intersects(b.rect):
+			continue
 		var r: Rect2 = _tile_rect(b.rect)
 		match b.kind:
 			Building.KIND_FIELD:
@@ -137,7 +164,7 @@ func _draw_buildings() -> void:
 				draw_circle(r.get_center(), r.size.x * 0.45, Color(0.55, 0.55, 0.58))
 				draw_circle(r.get_center(), r.size.x * 0.32, Color(0.16, 0.30, 0.45))
 				draw_circle(r.get_center(), r.size.x * 0.45, Color(0.32, 0.30, 0.28), false, 2.0)
-			Building.KIND_WORKSHOP:
+			Building.KIND_WORKSHOP, Building.KIND_BARN:
 				draw_rect(Rect2(r.position + Vector2(3, 4), r.size), Color(0, 0, 0, 0.25))
 				draw_rect(r, Color(0.50, 0.40, 0.30))
 				draw_rect(r, Color(0.22, 0.17, 0.12), false, 2.0)
@@ -154,7 +181,10 @@ func _draw_buildings() -> void:
 
 
 func _draw_trees() -> void:
+	var visible: Rect2 = _visible_tiles()
 	for p in sim.world.decor_trees:
+		if not visible.has_point(p):
+			continue
 		var px: Vector2 = p * TILE_PX
 		draw_rect(Rect2(px + Vector2(-2, -2), Vector2(4, 8)), Color(0.35, 0.24, 0.14))
 		draw_circle(px + Vector2(0, -6), 8.0, Color(0.22, 0.42, 0.20))
@@ -173,10 +203,14 @@ static func field_label(rec: AgentRecord, agent_id: int, selected: bool = false)
 
 
 func _draw_agents() -> void:
+	var visible: Rect2 = _visible_tiles()
 	for row in sim.store.count:
 		if sim.store.alive[row] == 0:
 			continue
-		var pos: Vector2 = sim.current_position(row) * TILE_PX
+		var tile_pos: Vector2 = sim.current_position(row)
+		if not visible.has_point(tile_pos):
+			continue
+		var pos: Vector2 = tile_pos * TILE_PX
 		var color: Color = AGENT_COLORS[row % AGENT_COLORS.size()]
 		var act: int = sim.store.activity[row]
 		# Schatten

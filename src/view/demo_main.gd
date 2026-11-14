@@ -15,12 +15,16 @@ var _sim_accumulator: float = 0.0
 var _last_load_message: String = ""
 
 
+func _make_config() -> SimConfig:
+	return SimConfig.new()
+
+
 func _ready() -> void:
-	sim = Simulation.create()
+	sim = Simulation.create(_make_config())
 	view_state = ViewState.new()
 	view_state.speed = 1
-	view_state.camera_position = Vector2(64, 64)
-	view_state.zoom = 1.6
+	view_state.camera_position = Vector2(sim.world.size * 0.5, sim.world.size * 0.5)
+	view_state.zoom = 0.65 if sim.config.profile == SimConfig.PROFILE_G2 else 1.6
 	world_view = WorldView.new()
 	add_child(world_view)
 	world_view.configure(sim, view_state)
@@ -40,7 +44,8 @@ func _ready() -> void:
 	add_child(chronicle_hud)
 	chronicle_hud.configure(sim, view_state)
 	_update_day_night()
-	hud.show_status("G1b läuft. F: Follow · T: Familie · C: Chronik", 6.0)
+	var gate: String = "G2 100 Agenten" if sim.config.profile == SimConfig.PROFILE_G2 else "G1b"
+	hud.show_status("%s läuft. F: Follow · T: Familie · C: Chronik" % gate, 6.0)
 
 
 func _process(delta: float) -> void:
@@ -131,8 +136,12 @@ func _on_pause_toggled(paused: bool) -> void:
 	hud.show_status("Pausiert" if paused else "Weiter", 2.0)
 
 
+func _save_path() -> String:
+	return SimSave.default_path()
+
+
 func _on_save() -> void:
-	var info: Dictionary = sim.save_to(SimSave.default_path())
+	var info: Dictionary = sim.save_to(_save_path())
 	if info.get("ok", false):
 		hud.show_status("Gespeichert: %d Bytes in %.2f ms" % [
 			int(info["bytes"]), float(info["save_ms"])])
@@ -141,7 +150,7 @@ func _on_save() -> void:
 
 
 func _on_load() -> void:
-	var loaded: Dictionary = Simulation.load_from(SimSave.default_path())
+	var loaded: Dictionary = Simulation.load_from(_save_path())
 	if not loaded.get("ok", false):
 		hud.show_status("Laden fehlgeschlagen: " + str(loaded.get("error", "?")), 6.0)
 		return
