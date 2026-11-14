@@ -7,11 +7,14 @@ extends RefCounted
 ## Historische Profile G1/G2 bleiben beim 30-Tage-Jahr, beim ganzjährigen
 ## Feldzyklus und beim Save-Schema 5. G3 ist ein eigenes Profil mit
 ## 120-Tage-Jahr, 4x30-Tage-Seasons, saisonalen Feldern und Save-Schema 6.
+## Das 10k-Profil ist ein weiteres 120-Tage-Profil mit Save-Schema 7.
 
 const SCHEMA_VERSION: int = 5
 const GAME_VERSION: int = 5
 const G3_SCHEMA_VERSION: int = 6
 const G3_GAME_VERSION: int = 6
+const SCALE_SCHEMA_VERSION: int = 7
+const SCALE_GAME_VERSION: int = 7
 
 const TICKS_PER_DAY: int = 86400
 const MINUTES_PER_DAY: int = 1440
@@ -21,13 +24,16 @@ const SEASONS: int = 4
 const MAP_SIZE: int = 128
 const MAP_SIZE_G2: int = 384
 const MAP_SIZE_G3: int = 768
+const MAP_SIZE_SCALE: int = 2048
 
 ## G1-Weltprofil (10 Agenten, 128x128) bleibt der unveränderte G1-Default.
 ## G2 nutzt explizit SimConfig.g2(): 384x384, 100 Agenten, 20-25 Haushalte.
 ## G3 nutzt SimConfig.g3(): 768x768, 1000 Agenten, 200-250 Haushalte.
+## SCALE nutzt SimConfig.scale(): 2048x2048, 10.000 Agenten, 2.000 Haushalte.
 const PROFILE_G1: int = 0
 const PROFILE_G2: int = 1
 const PROFILE_G3: int = 2
+const PROFILE_SCALE: int = 3
 const G2_TARGET_AGENTS: int = 100
 const G2_TARGET_HOUSEHOLDS: int = 24
 const G3_TARGET_AGENTS: int = 1000
@@ -35,6 +41,18 @@ const G3_TARGET_HOUSEHOLDS: int = 225
 const G3_FIELD_COUNT: int = 40
 const G3_YEAR_DAYS: int = 120
 const G3_SEASON_DAYS: int = 30
+
+const SCALE_TARGET_AGENTS: int = 10000
+const SCALE_TARGET_HOUSEHOLDS: int = 2000
+const SCALE_FIELD_COUNT: int = 200
+const SCALE_YEAR_DAYS: int = 120
+const SCALE_SEASON_DAYS: int = 30
+## Platzhalter-Balance des 10k-Kerns: 200 x (20.000 brutto - 2.000 Saatgut)
+## = 3,6 Mio. netto; 10.000 x 3 Mahlzeiten x 120 Tage = 3,6 Mio. Mahlzeiten.
+const SCALE_START_GRAIN: int = 3600000
+const SCALE_GRANARY_CAPACITY: int = 7200000
+const SCALE_FIELD_GROSS_YIELD: int = 20000
+const SCALE_FIELD_SEED_COST: int = 2000
 
 const TILE_METERS: float = 1.5
 const PIXELS_PER_TILE: int = 16
@@ -81,12 +99,42 @@ var target_agents: int = 10
 var target_households: int = 3
 
 # Kalender-/Feldprofil. G1/G2: 30-Tage-Jahr, ganzjähriger G1b-Feldzyklus.
-# G3: 120 Tage, 4x30 Seasons, eine Ernte/Feld/Jahr.
+# G3/SCALE: 120 Tage, 4x30 Seasons, eine Ernte/Feld/Jahr.
 var year_days: int = YEAR_DAYS
 var season_days: int = SEASON_DAYS
 var seasonal_fields: bool = false
 var field_seed_cost: int = 0
 var granary_capacity: int = 0
+# 10k-Kern: Routine-Events werden an der Quelle aggregiert, nicht als
+# Einzelobjekte materialisiert. Nur notable+ erreichen Debug-/Chronik-Log.
+var suppress_routine_events: bool = false
+# Abgeleitete Sekundenraten (nicht serialisiert, nicht im Config-Hash).
+var hunger_rate_s: float = 0.0
+var energy_awake_rate_s: float = 0.0
+var energy_sleep_rate_s: float = 0.0
+var social_rate_s: float = 0.0
+var hygiene_rate_s: float = 0.0
+var fun_rate_s: float = 0.0
+var health_bad_rate_s: float = 0.0
+var health_good_rate_s: float = 0.0
+var health_old_rate_s: float = 0.0
+
+
+func _init() -> void:
+	compute_derived_rates()
+
+
+func compute_derived_rates() -> void:
+	hunger_rate_s = hunger_per_day / 86400.0
+	energy_awake_rate_s = -energy_per_16h_awake / (16.0 * 3600.0)
+	energy_sleep_rate_s = energy_per_8h_sleep / (8.0 * 3600.0)
+	social_rate_s = -social_per_day / 86400.0
+	hygiene_rate_s = -hygiene_per_day / 86400.0
+	fun_rate_s = -fun_per_day / 86400.0
+	health_bad_rate_s = -health_bad_per_day / 86400.0
+	health_good_rate_s = health_recovery_per_day / 86400.0
+	health_old_rate_s = -health_old_per_year \
+		/ float(SimConfig.YEAR_DAYS) / 86400.0
 
 # G2-Pfadbudget. Die Budgets beeinflussen, wann ein Pfad vertagt wird, sind
 # damit autoritativ und Teil des Config-Hashs. Der Cache selbst ist abgeleitet.
@@ -205,6 +253,7 @@ static func g2(seed_value: int = DEFAULT_SEED) -> SimConfig:
 	c.path_lookup_budget = 50
 	c.path_frame_ticks = 80
 	c.map_version = 1
+	c.compute_derived_rates()
 	return c
 
 
@@ -239,6 +288,42 @@ static func g3(seed_value: int = DEFAULT_SEED) -> SimConfig:
 	c.lifecycle_rolls_per_year = 6
 	c.chronicle_summary_days = G3_YEAR_DAYS
 	c.chronicle_summary_max = 50000
+	c.compute_derived_rates()
+	return c
+
+
+## 10k-Kernprofil: 10.000 Agenten, 2.000 Haushalte, 200 Felder, 2048x2048.
+## Eigener Name ohne Gate-Kürzel, damit das historische G3-Scope-Gate
+## unverändert prüfen kann, dass keine 10k-Featurenamen im G3-Kern stehen.
+static func scale(seed_value: int = DEFAULT_SEED) -> SimConfig:
+	var c: SimConfig = SimConfig.new()
+	c.seed = seed_value
+	c.profile = PROFILE_SCALE
+	c.world_size = MAP_SIZE_SCALE
+	c.target_agents = SCALE_TARGET_AGENTS
+	c.target_households = SCALE_TARGET_HOUSEHOLDS
+	c.year_days = SCALE_YEAR_DAYS
+	c.season_days = SCALE_SEASON_DAYS
+	c.seasonal_fields = true
+	c.start_grain = SCALE_START_GRAIN
+	c.granary_capacity = SCALE_GRANARY_CAPACITY
+	c.field_harvest_yield = SCALE_FIELD_GROSS_YIELD
+	c.field_seed_cost = SCALE_FIELD_SEED_COST
+	c.field_plow_work_s = FIELD_PLOW_WORK_S
+	c.field_sow_work_s = FIELD_SOW_WORK_S
+	c.field_harvest_work_s = FIELD_HARVEST_WORK_S
+	c.path_cache_capacity = 65536
+	c.path_recalc_budget = 16
+	c.path_lookup_budget = 512
+	c.path_frame_ticks = 80
+	c.map_version = 1
+	c.lifecycle_first_roll_day = 10
+	c.lifecycle_roll_interval_days = 20
+	c.lifecycle_rolls_per_year = 6
+	c.chronicle_summary_days = SCALE_YEAR_DAYS
+	c.chronicle_summary_max = 50000
+	c.suppress_routine_events = true
+	c.compute_derived_rates()
 	return c
 
 
@@ -246,11 +331,29 @@ func is_g3() -> bool:
 	return profile == PROFILE_G3
 
 
+func is_scale() -> bool:
+	return profile == PROFILE_SCALE
+
+
+## G3 und das 10k-Profil teilen den saisonalen 120-Tage-Kalender und die
+## G3-Rollenpläne; G1/G2 behalten ihre historischen 30-Tage-Profile.
+func uses_seasonal_calendar() -> bool:
+	return seasonal_fields
+
+
+func uses_g3_schedule() -> bool:
+	return profile == PROFILE_G3 or profile == PROFILE_SCALE
+
+
 func save_schema_version() -> int:
+	if profile == PROFILE_SCALE:
+		return SCALE_SCHEMA_VERSION
 	return G3_SCHEMA_VERSION if is_g3() else SCHEMA_VERSION
 
 
 func game_version_for_save() -> int:
+	if profile == PROFILE_SCALE:
+		return SCALE_GAME_VERSION
 	return G3_GAME_VERSION if is_g3() else GAME_VERSION
 
 
@@ -389,4 +492,11 @@ func config_hash() -> int:
 	h = HashUtil.mix_i64(h, chronicle_historic_max)
 	h = HashUtil.mix_i64(h, chronicle_story_max_per_day)
 	h = HashUtil.mix_i64(h, chronicle_alert_max_per_day)
+	# Nur das 10k-Profil erweitert den Hash. G1/G2/G3-Hashes bleiben bitgleich.
+	if profile == PROFILE_SCALE:
+		h = HashUtil.mix_i64(h, SCALE_SCHEMA_VERSION)
+		h = HashUtil.mix_i64(h, SCALE_TARGET_AGENTS)
+		h = HashUtil.mix_i64(h, SCALE_TARGET_HOUSEHOLDS)
+		h = HashUtil.mix_i64(h, SCALE_FIELD_COUNT)
+		h = HashUtil.mix_i64(h, 1 if suppress_routine_events else 0)
 	return h

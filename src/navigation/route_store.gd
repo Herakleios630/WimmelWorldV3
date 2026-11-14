@@ -5,11 +5,14 @@ extends RefCounted
 ## Dictionaries). Routen sind kurz und werden nicht gecacht.
 
 var routes: Array = []
+## Abgeleitete Länge je Route; vermeidet Polyline-Summen pro Marker-Frame.
+var lengths: PackedFloat64Array = PackedFloat64Array()
 
 
 func create(points: PackedVector2Array) -> int:
 	var id: int = routes.size()
 	routes.append(points)
+	lengths.append(WorldMap.polyline_length(points))
 	return id
 
 
@@ -20,11 +23,14 @@ func get_points(route_id: int) -> PackedVector2Array:
 
 
 func length(route_id: int) -> float:
-	return WorldMap.polyline_length(get_points(route_id))
+	if route_id < 0 or route_id >= lengths.size():
+		return 0.0
+	return lengths[route_id]
 
 
 func clear() -> void:
 	routes.clear()
+	lengths.clear()
 
 
 ## Entfernt nicht mehr referenzierte Routen (abgeleitete Geometrie) und
@@ -43,12 +49,15 @@ func compact(store: AgentStore) -> void:
 	for i in mapping.size():
 		mapping[i] = -1
 	var kept: Array = []
+	var kept_lengths: PackedFloat64Array = PackedFloat64Array()
 	for i in routes.size():
 		if used[i] == 0:
 			continue
 		mapping[i] = kept.size()
 		kept.append(routes[i])
+		kept_lengths.append(lengths[i] if i < lengths.size() else 0.0)
 	routes = kept
+	lengths = kept_lengths
 	for row in store.count:
 		var rid2: int = store.route_id[row]
 		if rid2 >= 0 and rid2 < mapping.size():

@@ -1,6 +1,6 @@
 # WimmelWorld V3 — Planung
 
-Status: G3 bestanden (2026-11-14); G4a läuft (10k-Kern)  
+Status: G4a bestanden (2026-11-14); G4b läuft (Wirtschaft/Politik)  
 Stand: 2026-11-14  
 Arbeitsmodus: **Umsetzung läuft; G3 in Arbeit. Keine V1/V2-Änderungen, keine stillen Fidelity-/Balanceänderungen.**
 
@@ -1140,13 +1140,12 @@ Tiefensimulation; Verschiebung pro Gate erlaubt.
 
 ### 4.12 Status 2026-11-14
 
-- **G0, G0.5, G1, G1a.1, G1b 1–3, G2, B-Spike und G3 abgeschlossen.**
-- **G3:** 1.000-Agenten-Kleinstadt, 120-Tage-Jahr, saisonale Felder,
-  A*/Chunk/Save-Stress, D-57 Stubs; 360.000 Startgrain, 0 Skips, 1.040
-  Lebende, 40 Herbsternten.
+- **G0, G0.5, G1, G1a.1, G1b 1–3, G2, B-Spike, G3 und G4a abgeschlossen.**
+- **G4a:** 10.000 Agenten, 200 Felder, 120-Tage-Jahr, saisonale Felder,
+  10k@50x p95 12,3–12,5 ms, p99 17,4–18,0 ms; Save Schema 7.
 - **A/B:** getrennte Welten; Cursed Beyond 1x/A, WimmelWorld standalone
   150x/B. B-Spike bestätigt 100k@150x auf Simulationsebene.
-- **Git:** `b-spike`, `g2`, `g3` getaggt; G4a läuft, danach `g4a`/`g4b`.
+- **Git:** `b-spike`, `g2`, `g3`, `g4a` getaggt; G4b läuft, danach `g4b`.
 
 ### 4.13 Nachtrag 2026-11-14 — Kalender und Felder
 

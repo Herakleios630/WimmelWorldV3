@@ -1,7 +1,7 @@
 # WimmelWorld V3
 
-Status: **G4a läuft (10k-Kern); G3 ist Rückfall (`g3`).**  
-G0.5, G1, G2, B-Spike und G3 sind abgeschlossen.
+Status: **G4a bestanden (2026-11-14); G4b läuft (Wirtschaft/Politik).**  
+G0.5, G1, G2, B-Spike, G3 und G4a sind abgeschlossen.
 
 ## Was V3 ist
 
@@ -28,6 +28,8 @@ G0.5, G1, G2, B-Spike und G3 sind abgeschlossen.
 | `docs/g3/v3-g3-b-spike-report.md` | B-Spike-Messwerte und Empfehlung |
 | `docs/g3/v3-g3-spec.md` | G3: 1k-Kleinstadt, 120-Tage-Jahr, saisonale Felder |
 | `docs/g3/v3-g3-report.md` | G3: Tests, 120-Tage-Determinismus, Performance, Review |
+| `docs/g4/v3-g4-spec.md` | G4a/G4b: 10k-Kern und Systeme |
+| `docs/g4/v3-g4a-report.md` | G4a: 10k-Kern, Tests, Performance, Review |
 | `docs/v3-risk-register.md` | Risiken R1–R18, Auslöser, Gegenmaßnahmen |
 | `docs/v3-g0.5-spike.md` | Technikspike vor G1 (abgeschlossen) |
 | `docs/g0.5/v3-g0.5-results.md` | G0.5-Messwerte, C#-Vergleich, Portentscheid |

@@ -44,6 +44,9 @@ var deaths: int = 0
 var partnerships_formed: int = 0
 var households_dissolved: int = 0
 var lifecycle_ticks: int = 0
+# Diagnose der G4-Quellaggregation: keine autoritativen Simulationswerte.
+var suppressed_events_total: int = 0
+var suppressed_events_by_type: PackedInt32Array = PackedInt32Array()
 
 # Jahresbilanz (30-Tage-Jahr). year_* laufen, last_year_* ist der letzte
 # abgeschlossene Jahresabschluss.
@@ -87,7 +90,8 @@ func setup_new(p_config: SimConfig) -> void:
 	lifecycle = LifecycleSystem.new(self)
 	pathfinder = _make_pathfinder()
 	if config.profile == SimConfig.PROFILE_G2 \
-			or config.profile == SimConfig.PROFILE_G3:
+			or config.profile == SimConfig.PROFILE_G3 \
+			or config.profile == SimConfig.PROFILE_SCALE:
 		var generated: Dictionary = PopulationGenerator.generate(world, config)
 		records = generated["records"]
 		households = generated["households"]
@@ -111,6 +115,9 @@ func setup_new(p_config: SimConfig) -> void:
 	partnerships_formed = 0
 	households_dissolved = 0
 	lifecycle_ticks = 0
+	suppressed_events_total = 0
+	suppressed_events_by_type = PackedInt32Array()
+	suppressed_events_by_type.resize(64)
 	year_index = 0
 	year_start_grain = config.start_grain
 	year_grain_produced = 0
@@ -148,6 +155,8 @@ func _spawn_initial_agents() -> void:
 		if config.is_g3():
 			home_point = world.clamp_point(home_point + Vector2(
 				(float(row % 4) - 1.5) * 1.2, 0.0))
+		# Das 10k-Profil teilt den Home-Punkt pro Haus, damit der abgeleitete
+		# Pfad-Cache pro Haushalt statt pro Agent aufgebaut werden kann.
 		store.add_agent(rec.id, rec.age_years, rec.role, rec.household_id,
 			rec.home_building_id, rec.job_id, rec.job_kind,
 			home_point.x, home_point.y,
@@ -159,10 +168,13 @@ func _spawn_initial_agents() -> void:
 
 func _make_pathfinder() -> PathFinder:
 	if config.profile != SimConfig.PROFILE_G2 \
-			and config.profile != SimConfig.PROFILE_G3:
+			and config.profile != SimConfig.PROFILE_G3 \
+			and config.profile != SimConfig.PROFILE_SCALE:
 		return null
 	var defer_window: int = PathFinder.DEFER_WINDOW \
-		if config.profile == SimConfig.PROFILE_G3 else 1
+		if config.uses_g3_schedule() else 1
+	if config.is_scale():
+		defer_window = PathFinder.DEFER_WINDOW * 4
 	return PathFinder.new(world, config.map_version,
 		config.path_cache_capacity, config.path_lookup_budget,
 		config.path_recalc_budget, defer_window)
@@ -170,6 +182,9 @@ func _make_pathfinder() -> PathFinder:
 
 func _prewarm_paths() -> void:
 	if pathfinder == null or decisions == null:
+		return
+	if config.profile == SimConfig.PROFILE_SCALE:
+		_prewarm_paths_scale()
 		return
 	if config.profile == SimConfig.PROFILE_G3:
 		_prewarm_paths_g3()
@@ -211,6 +226,30 @@ func _prewarm_paths_g3() -> void:
 		for anchor in anchors:
 			pathfinder.prewarm(home, anchor)
 			pathfinder.prewarm(anchor, home)
+
+
+## 10k-Prewarming: pro Haushalt einmal Home <-> Arbeitsziel und die Rückwege.
+## Der Home-Punkt ist im 10k-Profil pro Haus geteilt; damit bleiben es rund
+## 8.000 statt 80.000 A*-Läufe. Der Cache ist abgeleitet und nicht im Save.
+func _prewarm_paths_scale() -> void:
+	var seen_homes: Dictionary = {}
+	for row in store.count:
+		if store.alive[row] == 0:
+			continue
+		var home_id: int = store.home_id[row]
+		if seen_homes.has(home_id):
+			continue
+		seen_homes[home_id] = true
+		var points: PackedVector2Array = decisions.warmup_points(row)
+		if points.size() < 4:
+			continue
+		var home: Vector2 = points[1]
+		var field: Vector2 = points[2]
+		var workshop: Vector2 = points[3]
+		pathfinder.prewarm(home, field)
+		pathfinder.prewarm(field, home)
+		pathfinder.prewarm(home, workshop)
+		pathfinder.prewarm(workshop, home)
 
 
 func _schedule_initial_field_ticks() -> void:
@@ -302,7 +341,8 @@ func _dispatch(kind: int, payload: int) -> void:
 			0, "day_start", "Tag beginnt", day)
 		lifecycle.on_day_tick(day)
 		if config.profile == SimConfig.PROFILE_G2 \
-				or config.profile == SimConfig.PROFILE_G3:
+				or config.profile == SimConfig.PROFILE_G3 \
+				or config.profile == SimConfig.PROFILE_SCALE:
 			routes.compact(store)
 		if day > 0 and day % maxi(1, config.year_days) == 0:
 			_complete_year()
@@ -336,11 +376,28 @@ func _complete_year() -> void:
 
 func log_event(type: int, importance: int, agent_id: int, template_key: String,
 		text: String = "", data: int = 0) -> SimEvent:
+	if config.suppress_routine_events and _is_source_aggregated(type, importance):
+		suppressed_events_total += 1
+		if suppressed_events_by_type.size() < 64:
+			suppressed_events_by_type.resize(64)
+		suppressed_events_by_type[type] += 1
+		return null
 	var event: SimEvent = logs.emit(clock.now, type, importance, agent_id,
 		template_key, text, data)
 	if chronicle != null:
 		chronicle.ingest(event, self)
 	return event
+
+
+## 10k-Quellaggregation: hochfrequente Alltags-Events werden gezählt, nicht
+## als Objekt materialisiert. Seltene/notable Lebens-, Feld- und Krisen-Events
+## bleiben vollständig erhalten.
+func _is_source_aggregated(type: int, importance: int) -> bool:
+	if importance == SimEvent.IMPORTANCE_ROUTINE:
+		return true
+	if type == SimEvent.T_WORK_END or type == SimEvent.T_NEED_INTERRUPT:
+		return true
+	return false
 
 
 func request_wake_by_id(agent_id: int, at_time: int) -> void:

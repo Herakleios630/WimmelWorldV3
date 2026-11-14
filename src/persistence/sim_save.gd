@@ -11,12 +11,15 @@ extends RefCounted
 const MAGIC: int = 0x57473141
 # Historische Profile G1/G2 bleiben Schema 5. G3 nutzt Schema 6, damit der
 # 120-Tage-Kalender, die saisonalen Feldzustände und die 1k-Welt sichtbar
-# versioniert sind. Die Konstanten 5 bleiben für die unveränderten G1/G2-Tests.
+# versioniert sind. Das 10k-Profil nutzt Schema 7 mit komprimiertem Payload.
 const SCHEMA_VERSION: int = 5
 const GAME_VERSION: int = 5
 const G3_SCHEMA_VERSION: int = SimConfig.G3_SCHEMA_VERSION
+const SCALE_SCHEMA_VERSION: int = SimConfig.SCALE_SCHEMA_VERSION
+const COMPRESSED_MAGIC: int = 0x5A535444
 const HEADER_SIZE: int = 28
 const MAX_ARRAY: int = 2000000
+const MAX_FIELDS: int = 4096
 
 
 static func default_path() -> String:
@@ -28,9 +31,17 @@ static func save_simulation(sim: Simulation, path: String) -> Dictionary:
 	var payload_writer: ByteWriter = ByteWriter.new()
 	_encode_payload(sim, payload_writer)
 	var payload: PackedByteArray = payload_writer.buf
+	var schema: int = sim.config.save_schema_version()
+	if schema == SCALE_SCHEMA_VERSION:
+		var packed: PackedByteArray = payload.compress(FileAccess.COMPRESSION_ZSTD)
+		var cw: ByteWriter = ByteWriter.new()
+		cw.u32(COMPRESSED_MAGIC)
+		cw.u64(payload.size())
+		cw.raw(packed)
+		payload = cw.buf
 	var writer: ByteWriter = ByteWriter.new()
 	writer.u32(MAGIC)
-	writer.u32(sim.config.save_schema_version())
+	writer.u32(schema)
 	writer.u32(sim.config.game_version_for_save())
 	writer.u64(sim.config.config_hash())
 	writer.u64(payload.size())
@@ -70,7 +81,8 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 	if magic != MAGIC:
 		return {"ok": false, "error": "bad_magic", "magic": magic}
 	var schema: int = header.u32()
-	if schema != SCHEMA_VERSION and schema != G3_SCHEMA_VERSION:
+	if schema != SCHEMA_VERSION and schema != G3_SCHEMA_VERSION \
+			and schema != SCALE_SCHEMA_VERSION:
 		return {"ok": false, "error": "unsupported_schema", "schema": schema}
 	var game_version: int = header.u32()
 	if game_version < 1:
@@ -80,6 +92,26 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 	if payload_size < 0 or HEADER_SIZE + payload_size > bytes.size():
 		return {"ok": false, "error": "bad_payload_size", "payload_size": payload_size}
 	var payload: PackedByteArray = bytes.slice(HEADER_SIZE, HEADER_SIZE + payload_size)
+	if schema == SCALE_SCHEMA_VERSION:
+		var packed_reader: ByteReader = ByteReader.new(payload)
+		var compressed_magic: int = packed_reader.u32()
+		var uncompressed_size: int = packed_reader.u64()
+		if compressed_magic != COMPRESSED_MAGIC or not packed_reader.ok:
+			return {"ok": false, "error": "bad_compressed_payload"}
+		if uncompressed_size < 0 or uncompressed_size > MAX_ARRAY * 64:
+			return {"ok": false, "error": "bad_uncompressed_size"}
+		var compressed: PackedByteArray = payload.slice(packed_reader.pos,
+			payload.size())
+		payload = compressed.decompress(uncompressed_size,
+			FileAccess.COMPRESSION_ZSTD)
+		if payload.size() != uncompressed_size:
+			return {"ok": false, "error": "decompress_failed"}
+	elif payload.size() >= 4:
+		# Ein komprimierter 7er-Payload, dessen Schema-Byte manipuliert wurde,
+		# wird nicht als 5er/6er-Rohpayload interpretiert.
+		var probe: ByteReader = ByteReader.new(payload)
+		if probe.u32() == COMPRESSED_MAGIC:
+			return {"ok": false, "error": "unsupported_schema", "schema": schema}
 	var reader: ByteReader = ByteReader.new(payload)
 	var config: SimConfig = _read_config(reader, schema)
 	if not reader.ok:
@@ -120,7 +152,7 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 	for i in 4:
 		sim.harvest_season_counts[i] = reader.i64()
 	var field_count: int = reader.u32()
-	if field_count < 0 or field_count > 64:
+	if field_count < 0 or field_count > MAX_FIELDS:
 		return {"ok": false, "error": "bad_field_count"}
 	for _i in field_count:
 		var field_id: int = reader.i32()
@@ -134,7 +166,7 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 			field.field_work_s = field_work_s
 			field.field_growth_end = field_growth_end
 			field.field_growth_gen = field_growth_gen
-		if schema == G3_SCHEMA_VERSION:
+		if schema >= G3_SCHEMA_VERSION:
 			var crop_year: int = reader.i32()
 			var harvested_year: int = reader.i32()
 			var shortage_day: int = reader.i32()
@@ -255,12 +287,14 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 	w.i64(config.chronicle_historic_max)
 	w.i64(config.chronicle_story_max_per_day)
 	w.i64(config.chronicle_alert_max_per_day)
-	if config.save_schema_version() == G3_SCHEMA_VERSION:
+	if config.save_schema_version() >= G3_SCHEMA_VERSION:
 		w.i32(config.year_days)
 		w.i32(config.season_days)
 		w.i32(1 if config.seasonal_fields else 0)
 		w.i64(config.field_seed_cost)
 		w.i64(config.granary_capacity)
+	if config.save_schema_version() == SCALE_SCHEMA_VERSION:
+		w.i32(1 if config.suppress_routine_events else 0)
 
 	w.i64(sim.clock.now)
 	var sched: EventScheduler = sim.scheduler
@@ -297,7 +331,7 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 		w.i64(sim.harvest_season_counts[i])
 	var field_ids: PackedInt32Array = sim.world.field_ids()
 	w.u32(field_ids.size())
-	var g3_schema: bool = config.save_schema_version() == G3_SCHEMA_VERSION
+	var g3_schema: bool = config.save_schema_version() >= G3_SCHEMA_VERSION
 	for field_id in field_ids:
 		var field: Building = sim.world.building_by_id(field_id)
 		w.i32(field_id)
@@ -638,6 +672,7 @@ static func _read_routes(r: ByteReader) -> RouteStore:
 		for j in n:
 			points.append(Vector2(r.f64(), r.f64()))
 		routes.routes.append(points)
+		routes.lengths.append(WorldMap.polyline_length(points))
 	return routes
 
 
@@ -650,7 +685,12 @@ static func _read_config(r: ByteReader, schema: int) -> SimConfig:
 		r.ok = false
 		r.error = "unsupported_schema"
 		return config
-	if schema == SCHEMA_VERSION and config.profile == SimConfig.PROFILE_G3:
+	if schema == SCHEMA_VERSION and config.profile != SimConfig.PROFILE_G1 \
+			and config.profile != SimConfig.PROFILE_G2:
+		r.ok = false
+		r.error = "unsupported_schema"
+		return config
+	if schema == SCALE_SCHEMA_VERSION and config.profile != SimConfig.PROFILE_SCALE:
 		r.ok = false
 		r.error = "unsupported_schema"
 		return config
@@ -724,12 +764,15 @@ static func _read_config(r: ByteReader, schema: int) -> SimConfig:
 	config.chronicle_historic_max = r.i64()
 	config.chronicle_story_max_per_day = r.i64()
 	config.chronicle_alert_max_per_day = r.i64()
-	if schema == G3_SCHEMA_VERSION:
+	if schema >= G3_SCHEMA_VERSION:
 		config.year_days = r.i32()
 		config.season_days = r.i32()
 		config.seasonal_fields = r.i32() != 0
 		config.field_seed_cost = r.i64()
 		config.granary_capacity = r.i64()
+	if schema == SCALE_SCHEMA_VERSION:
+		config.suppress_routine_events = r.i32() != 0
+	config.compute_derived_rates()
 	return config
 
 

@@ -12,6 +12,11 @@ var _terrain_texture: ImageTexture
 var _terrain_seed: int = -1
 var _terrain_world_size: int = -1
 var _font: Font
+var _agent_markers: MultiMeshInstance2D
+var _agent_multimesh: MultiMesh
+var _marker_frame: int = 0
+var _marker_colors_primed: int = 0
+var _marker_state: PackedByteArray = PackedByteArray()
 
 const AGENT_COLORS: Array = [
 	Color(0.95, 0.78, 0.45), Color(0.86, 0.55, 0.42), Color(0.55, 0.78, 0.92),
@@ -24,6 +29,7 @@ const AGENT_COLORS: Array = [
 func _ready() -> void:
 	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	_font = ThemeDB.fallback_font
+	_build_agent_markers()
 
 
 func configure(p_sim: Simulation, p_view_state: ViewState) -> void:
@@ -32,10 +38,82 @@ func configure(p_sim: Simulation, p_view_state: ViewState) -> void:
 	if sim != null and (_terrain_seed != sim.config.seed
 			or _terrain_world_size != sim.world.size):
 		_build_terrain()
+	if sim != null and sim.config.is_scale():
+		_ensure_marker_capacity(sim.store.count)
 	queue_redraw()
 
 
+## Ein Draw-Call für die 10k-Marker. Die Aktualisierung ist reine Darstellung
+## und wird auf jedem zweiten Frame ausgeführt; die Simulation bleibt
+## kameraunabhängig und unverändert.
+func _build_agent_markers() -> void:
+	_agent_multimesh = MultiMesh.new()
+	_agent_multimesh.transform_format = MultiMesh.TRANSFORM_2D
+	_agent_multimesh.use_colors = true
+	var quad: QuadMesh = QuadMesh.new()
+	quad.size = Vector2(6, 6)
+	_agent_multimesh.mesh = quad
+	_agent_markers = MultiMeshInstance2D.new()
+	_agent_markers.multimesh = _agent_multimesh
+	_agent_markers.visible = false
+	add_child(_agent_markers)
+
+
+func _ensure_marker_capacity(count: int) -> void:
+	if _agent_multimesh == null:
+		return
+	if _agent_multimesh.instance_count < count:
+		_agent_multimesh.instance_count = count
+		_agent_multimesh.visible_instance_count = 0
+	if _marker_colors_primed < count:
+		for row in range(_marker_colors_primed, count):
+			_agent_multimesh.set_instance_color(row,
+				AGENT_COLORS[row % AGENT_COLORS.size()])
+			_agent_multimesh.set_instance_transform_2d(row,
+				Transform2D(0.0, Vector2(-10000, -10000)))
+		_marker_colors_primed = count
+	if _marker_state.size() < count:
+		var old: int = _marker_state.size()
+		_marker_state.resize(count)
+		for i in range(old, count):
+			_marker_state[i] = 0
+
+
+func _build_terrain_scale() -> void:
+	var size: int = sim.world.size
+	var img: Image = Image.create(size, size, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0.42, 0.55, 0.32))
+	for rect in sim.world._road_rects:
+		var r: Rect2i = rect
+		_fill_clipped(img, r, Color(0.55, 0.46, 0.33))
+	for field_id in sim.world.field_ids():
+		var field: Building = sim.world.building_by_id(field_id)
+		if field != null:
+			_fill_clipped(img, field.rect, Color(0.58, 0.62, 0.30))
+	for building in sim.world.buildings:
+		var b: Building = building
+		if b.kind == Building.KIND_FIELD:
+			continue
+		_fill_clipped(img, b.rect, Color(0.30, 0.26, 0.22))
+	_terrain_texture = ImageTexture.create_from_image(img)
+	_terrain_seed = sim.config.seed
+	_terrain_world_size = size
+
+
+func _fill_clipped(img: Image, rect: Rect2i, color: Color) -> void:
+	var x0: int = clampi(rect.position.x, 0, img.get_width())
+	var y0: int = clampi(rect.position.y, 0, img.get_height())
+	var x1: int = clampi(rect.position.x + rect.size.x, 0, img.get_width())
+	var y1: int = clampi(rect.position.y + rect.size.y, 0, img.get_height())
+	if x1 <= x0 or y1 <= y0:
+		return
+	img.fill_rect(Rect2i(x0, y0, x1 - x0, y1 - y0), color)
+
+
 func _build_terrain() -> void:
+	if sim.config.is_scale():
+		_build_terrain_scale()
+		return
 	var size: int = sim.world.size
 	var img: Image = Image.create(size, size, false, Image.FORMAT_RGBA8)
 	var field_tiles: PackedByteArray = PackedByteArray()
@@ -81,6 +159,12 @@ func _draw() -> void:
 	if _terrain_texture != null:
 		draw_texture_rect(_terrain_texture,
 			Rect2(0, 0, sim.world.size * TILE_PX, sim.world.size * TILE_PX), false)
+	# 10k-Fern-LOD: Die Terrain-Textur enthält Straßen/Felder/Häuser bereits.
+	# Bei weitem Zoom sparen wir die tausenden Per-Gebäude-Draw-Kommandos.
+	if sim.config.is_scale() and view_state != null and view_state.zoom < 0.62:
+		if view_state.agents_visible:
+			_draw_agents()
+		return
 	_draw_field_details()
 	_draw_buildings()
 	_draw_trees()
@@ -94,8 +178,8 @@ func _tile_rect(rect: Rect2i) -> Rect2:
 
 
 func _far_detail() -> bool:
-	return sim != null and sim.config.is_g3() and view_state != null \
-		and view_state.zoom < 0.85
+	return sim != null and (sim.config.is_g3() or sim.config.is_scale()) \
+		and view_state != null and view_state.zoom < 0.85
 
 
 func _draw_field_details() -> void:
@@ -219,18 +303,82 @@ static func field_label(rec: AgentRecord, agent_id: int, selected: bool = false)
 	return "%s%d" % [rec.name.substr(0, 2), agent_id]
 
 
+func _update_agent_markers(visible: Rect2) -> void:
+	if _agent_multimesh == null:
+		return
+	_marker_frame += 1
+	var groups: int = 3 if sim.config.is_scale() else 2
+	var group: int = _marker_frame % groups
+	_ensure_marker_capacity(sim.store.count)
+	_agent_multimesh.visible_instance_count = sim.store.count
+	for row in range(group, sim.store.count, groups):
+		if sim.store.alive[row] == 0:
+			_hide_marker(row)
+			continue
+		var settled: Vector2 = Vector2(sim.store.pos_x[row], sim.store.pos_y[row])
+		var candidate: Vector2 = settled
+		var rid: int = sim.store.route_id[row]
+		if rid >= 0:
+			var a: Vector2 = Vector2(sim.store.travel_start_x[row],
+				sim.store.travel_start_y[row])
+			var b: Vector2 = Vector2(sim.store.travel_end_x[row],
+				sim.store.travel_end_y[row])
+			if not _segment_bbox_touches(visible, a, b):
+				_hide_marker(row)
+				continue
+			candidate = sim.current_position(row)
+		if not visible.has_point(candidate):
+			_hide_marker(row)
+			continue
+		var pos: Vector2 = candidate * TILE_PX
+		_agent_multimesh.set_instance_transform_2d(row,
+			Transform2D(0.0, pos + Vector2(0, -4)))
+		_marker_state[row] = 1
+
+
+func _hide_marker(row: int) -> void:
+	if row < _marker_state.size() and _marker_state[row] == 0:
+		return
+	_agent_multimesh.set_instance_transform_2d(row,
+		Transform2D(0.0, Vector2(-10000, -10000)))
+	if row < _marker_state.size():
+		_marker_state[row] = 0
+
+
+func _segment_bbox_touches(rect: Rect2, a: Vector2, b: Vector2) -> bool:
+	var r: Rect2 = Rect2(Vector2(minf(a.x, b.x), minf(a.y, b.y)),
+		Vector2(absf(b.x - a.x), absf(b.y - a.y)))
+	return rect.intersects(r)
+
+
 func _draw_agents() -> void:
 	var visible: Rect2 = _visible_tiles()
 	# Render-LOD ist rein darstellend und nie Simulationszustand. Bei 1k und
 	# weitem Zoom zeichnen wir Marker; Labels nur nah/selektiert/gefolgt.
 	var g3: bool = sim.config.is_g3()
 	var zoom: float = view_state.zoom if view_state != null else 1.0
-	var far_markers: bool = g3 and zoom < 1.05
+	var far_markers: bool = (g3 or sim.config.is_scale()) and zoom < 1.05
+	if sim.config.is_scale() and far_markers:
+		_update_agent_markers(visible)
+		if _agent_markers != null:
+			_agent_markers.visible = true
+		return
+	if _agent_markers != null:
+		_agent_markers.visible = false
 	var show_labels: bool = (not g3) or zoom >= 1.25
 	for row in sim.store.count:
 		if sim.store.alive[row] == 0:
 			continue
-		var tile_pos: Vector2 = sim.current_position(row)
+		var tile_pos: Vector2 = Vector2(sim.store.pos_x[row], sim.store.pos_y[row])
+		var rid: int = sim.store.route_id[row]
+		if rid >= 0:
+			var a: Vector2 = Vector2(sim.store.travel_start_x[row],
+				sim.store.travel_start_y[row])
+			var b: Vector2 = Vector2(sim.store.travel_end_x[row],
+				sim.store.travel_end_y[row])
+			if not _segment_bbox_touches(visible, a, b):
+				continue
+			tile_pos = sim.current_position(row)
 		if not visible.has_point(tile_pos):
 			continue
 		var pos: Vector2 = tile_pos * TILE_PX

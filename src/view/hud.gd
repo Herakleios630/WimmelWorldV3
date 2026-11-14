@@ -217,7 +217,8 @@ func refresh(sim: Simulation) -> void:
 	if sim == null:
 		return
 	_stub_label.visible = sim.config.profile == SimConfig.PROFILE_G2 \
-		or sim.config.profile == SimConfig.PROFILE_G3
+		or sim.config.profile == SimConfig.PROFILE_G3 \
+		or sim.config.profile == SimConfig.PROFILE_SCALE
 	var now_ms: int = Time.get_ticks_msec()
 	if now_ms - _last_refresh_ms < 100:
 		return

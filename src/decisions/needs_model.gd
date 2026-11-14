@@ -34,19 +34,19 @@ static func clamp_need(value: float) -> float:
 
 
 static func hunger_rate(config: SimConfig) -> float:
-	return config.hunger_per_day / 86400.0
+	return config.hunger_rate_s
 
 
 static func energy_rate(store: AgentStore, row: int, config: SimConfig) -> float:
 	if store.activity[row] == AgentStore.ACT_SLEEP:
-		return config.energy_per_8h_sleep / (8.0 * 3600.0)
-	return -config.energy_per_16h_awake / (16.0 * 3600.0)
+		return config.energy_sleep_rate_s
+	return config.energy_awake_rate_s
 
 
 static func social_rate(store: AgentStore, row: int, config: SimConfig) -> float:
 	if store.activity[row] == AgentStore.ACT_SLEEP:
 		return 0.0
-	var rate: float = -config.social_per_day / 86400.0
+	var rate: float = config.social_rate_s
 	# Niedriger Spaß senkt die Stimmung und beschleunigt den Sozialverlust.
 	if store.fun[row] <= config.fun_threshold:
 		rate *= 1.5
@@ -54,13 +54,13 @@ static func social_rate(store: AgentStore, row: int, config: SimConfig) -> float
 
 
 static func hygiene_rate(store: AgentStore, row: int, config: SimConfig) -> float:
-	return -config.hygiene_per_day / 86400.0
+	return config.hygiene_rate_s
 
 
 static func fun_rate(store: AgentStore, row: int, config: SimConfig) -> float:
 	if store.activity[row] == AgentStore.ACT_SLEEP:
 		return 0.0
-	return -config.fun_per_day / 86400.0
+	return config.fun_rate_s
 
 
 ## Gesundheit reagiert auf den Zustand vor dem Settle-Intervall. Das ist eine
@@ -83,11 +83,11 @@ static func health_rate(store: AgentStore, row: int, config: SimConfig,
 		bad: bool, good: bool) -> float:
 	var age_rate: float = 0.0
 	if store.age_years[row] >= OLD_AGE:
-		age_rate = -config.health_old_per_year / float(SimConfig.YEAR_DAYS) / 86400.0
+		age_rate = config.health_old_rate_s
 	if bad:
-		return -config.health_bad_per_day / 86400.0 + age_rate
+		return config.health_bad_rate_s + age_rate
 	if good:
-		return config.health_recovery_per_day / 86400.0 + age_rate
+		return config.health_good_rate_s + age_rate
 	return age_rate
 
 
@@ -97,19 +97,44 @@ static func settle(store: AgentStore, row: int, now: int, config: SimConfig) -> 
 	if now <= last:
 		return
 	var dt: float = float(now - last)
-	var bad: bool = health_is_bad(store, row, config)
-	var good: bool = health_is_good(store, row, config)
-	var er: float = energy_rate(store, row, config)
-	var sr: float = social_rate(store, row, config)
-	var hr: float = hygiene_rate(store, row, config)
-	var fr: float = fun_rate(store, row, config)
-	var health_r: float = health_rate(store, row, config, bad, good)
-	store.hunger[row] = clamp_need(store.hunger[row] + hunger_rate(config) * dt)
-	store.energy[row] = clamp_need(store.energy[row] + er * dt)
-	store.social[row] = clamp_need(store.social[row] + sr * dt)
-	store.hygiene[row] = clamp_need(store.hygiene[row] + hr * dt)
-	store.fun[row] = clamp_need(store.fun[row] + fr * dt)
-	store.health[row] = clamp_need(store.health[row] + health_r * dt)
+	# Inline-Version der G1b-Formeln mit vorberechneten Sekundenraten. Die
+	# Semantik ist identisch zu health_rate()/energy_rate() usw., spart aber
+	# bei 10k mehrere statische Aufrufe und Config-Divisionen pro Wake.
+	var hunger: float = store.hunger[row]
+	var energy: float = store.energy[row]
+	var social: float = store.social[row]
+	var hygiene: float = store.hygiene[row]
+	var fun: float = store.fun[row]
+	var bad: bool = hunger >= config.hunger_threshold \
+		or energy <= config.energy_threshold \
+		or hygiene <= config.hygiene_threshold
+	var good: bool = hunger < config.hunger_threshold * 0.6 \
+		and energy > config.energy_threshold * 1.5 \
+		and hygiene > config.hygiene_threshold \
+		and social > config.social_threshold \
+		and fun > config.fun_threshold
+	var sleeping: bool = store.activity[row] == AgentStore.ACT_SLEEP
+	var er: float = config.energy_sleep_rate_s if sleeping \
+		else config.energy_awake_rate_s
+	var sr: float = 0.0
+	if not sleeping:
+		sr = config.social_rate_s
+		if fun <= config.fun_threshold:
+			sr *= 1.5
+	var fr: float = 0.0 if sleeping else config.fun_rate_s
+	var health_r: float = 0.0
+	if store.age_years[row] >= OLD_AGE:
+		health_r = config.health_old_rate_s
+	if bad:
+		health_r += config.health_bad_rate_s
+	elif good:
+		health_r += config.health_good_rate_s
+	store.hunger[row] = clampf(hunger + config.hunger_rate_s * dt, 0.0, 100.0)
+	store.energy[row] = clampf(energy + er * dt, 0.0, 100.0)
+	store.social[row] = clampf(social + sr * dt, 0.0, 100.0)
+	store.hygiene[row] = clampf(hygiene + config.hygiene_rate_s * dt, 0.0, 100.0)
+	store.fun[row] = clampf(fun + fr * dt, 0.0, 100.0)
+	store.health[row] = clampf(store.health[row] + health_r * dt, 0.0, 100.0)
 	store.need_time[row] = now
 
 

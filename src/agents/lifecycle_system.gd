@@ -17,6 +17,13 @@ extends RefCounted
 ## Schwacher Rückverweis: Simulation hält LifecycleSystem, LifecycleSystem darf
 ## die Simulation nicht stark halten (RefCounted-Zyklus/Leak).
 var _sim_ref: WeakRef
+# Abgeleitete Indizes: Geburtstage nach Tag-im-Jahr und Beziehungen pro Agent.
+# Beide werden aus dem autoritativen Zustand gebaut und bei Änderungen gepflegt.
+var _birthday_index: Dictionary = {}
+var _birthday_index_ready: bool = false
+var _rel_by_agent: Dictionary = {}
+var _rel_index_ready: bool = false
+var _next_rel_id: int = 1
 
 
 func _init(sim_ref = null) -> void:
@@ -51,9 +58,31 @@ func _is_roll_day(day: int) -> bool:
 	return day >= first and (day - first) % interval == 0
 
 
-func _update_birthdays(day: int) -> void:
+func _ensure_birthday_index() -> void:
+	if _birthday_index_ready:
+		return
 	var store: AgentStore = _store()
 	for row in store.count:
+		_add_birthday_row(row)
+	_birthday_index_ready = true
+
+
+func _add_birthday_row(row: int) -> void:
+	var store: AgentStore = _store()
+	var key: int = posmod(store.birth_day[row], maxi(1, _config().year_days))
+	var rows: PackedInt32Array = _birthday_index.get(key, PackedInt32Array())
+	rows.append(row)
+	_birthday_index[key] = rows
+
+
+## Nur Agenten mit heutigem Jahrestag werden geprüft. Bei 10k sind das rund
+## 83 statt 10.000 Zeilen pro Tages-Tick; Verhalten und Alterung sind identisch.
+func _update_birthdays(day: int) -> void:
+	_ensure_birthday_index()
+	var store: AgentStore = _store()
+	var key: int = posmod(day, maxi(1, _config().year_days))
+	var rows = _birthday_index.get(key, PackedInt32Array())
+	for row in rows:
 		if store.alive[row] == 0:
 			continue
 		var new_age: int = LifecycleRules.age_from_birth_day(store.birth_day[row],
@@ -248,6 +277,8 @@ func _give_birth(row: int, day: int) -> void:
 	var rec: AgentRecord = AgentRecord.new(new_id, child_name, child_sex, 0,
 		AgentStore.ROLE_CHILD, household_id, home_id, 0, AgentStore.JOB_NONE, day)
 	_sim().records.append(rec)
+	if _birthday_index_ready:
+		_add_birthday_row(store.count - 1)
 	var household: HouseholdRecord = household_by_id(household_id)
 	if household != null and household.is_active():
 		_add_to_household_sorted(household, new_id)
@@ -365,12 +396,42 @@ func _assign_minor(minor_id: int, old_household: int, day: int) -> void:
 			minor_id, "household_ward", "kein Haushalt", old_household)
 
 
+func _ensure_rel_index() -> void:
+	if _rel_index_ready:
+		return
+	_rel_by_agent.clear()
+	_next_rel_id = 1
+	for relationship in _sim().relationships:
+		_index_relationship(relationship as RelationshipRecord)
+	_rel_index_ready = true
+
+
+func _index_relationship(rel: RelationshipRecord) -> void:
+	if rel.id >= _next_rel_id:
+		_next_rel_id = rel.id + 1
+	_add_rel_side(rel.a_agent_id, rel)
+	_add_rel_side(rel.b_agent_id, rel)
+
+
+func _add_rel_side(agent_id: int, rel: RelationshipRecord) -> void:
+	if agent_id <= 0:
+		return
+	if not _rel_by_agent.has(agent_id):
+		_rel_by_agent[agent_id] = []
+	(_rel_by_agent[agent_id] as Array).append(rel)
+
+
+func _rels_for(agent_id: int) -> Array:
+	_ensure_rel_index()
+	return _rel_by_agent.get(agent_id, [])
+
+
 func _find_related_household(minor_id: int, old_household: int) -> int:
 	var store: AgentStore = _store()
 	var best_household: int = 0
 	var best_priority: int = 99
 	var best_relative: int = 0x7FFFFFFF
-	for relationship in _sim().relationships:
+	for relationship in _rels_for(minor_id):
 		var rel: RelationshipRecord = relationship
 		var relative: int = 0
 		var priority: int = 2
@@ -457,8 +518,8 @@ func _is_alive(agent_id: int) -> bool:
 func partner_of(agent_id: int) -> int:
 	if not _is_alive(agent_id):
 		return 0
-	for relationship in _sim().relationships:
-		var rel: RelationshipRecord = relationship
+	for rel_v in _rels_for(agent_id):
+		var rel: RelationshipRecord = rel_v
 		if rel.type != RelationshipRecord.TYPE_PARTNER:
 			continue
 		var other: int = 0
@@ -474,8 +535,8 @@ func partner_of(agent_id: int) -> int:
 
 
 func has_direct_kin(a: int, b: int) -> bool:
-	for relationship in _sim().relationships:
-		var rel: RelationshipRecord = relationship
+	for rel_v in _rels_for(a):
+		var rel: RelationshipRecord = rel_v
 		if rel.type != RelationshipRecord.TYPE_PARENT \
 				and rel.type != RelationshipRecord.TYPE_CHILD \
 				and rel.type != RelationshipRecord.TYPE_GRANDPARENT:
@@ -488,14 +549,12 @@ func has_direct_kin(a: int, b: int) -> bool:
 
 func add_relationship(rel_type: int, a: int, b: int, strength: int,
 		since_day: int) -> RelationshipRecord:
-	var next_id: int = 1
-	for relationship in _sim().relationships:
-		var rel: RelationshipRecord = relationship
-		if rel.id >= next_id:
-			next_id = rel.id + 1
-	var record: RelationshipRecord = RelationshipRecord.new(next_id, rel_type,
-		a, b, strength, since_day)
+	_ensure_rel_index()
+	var record: RelationshipRecord = RelationshipRecord.new(_next_rel_id,
+		rel_type, a, b, strength, since_day)
+	_next_rel_id += 1
 	_sim().relationships.append(record)
+	_index_relationship(record)
 	return record
 
 

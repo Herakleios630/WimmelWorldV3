@@ -174,9 +174,16 @@ func _populate_agent_filter() -> void:
 	_agent_filter.add_item("Alle Agenten", 0)
 	if sim == null:
 		return
-	for record in sim.records:
-		var rec: AgentRecord = record
+	# Die Dropdown-Liste bleibt bei 10k bewusst auf 1.000 Einträge begrenzt;
+	# Auswahl per Klick/Follow und der Agent-Filter im Modell funktionieren
+	# weiterhin für jeden Agenten. 10.000 OptionButton-Zeilen wären weder
+	# lesbar noch UI-performant.
+	var limit: int = 1000 if sim.store.count > 2000 else sim.records.size()
+	for i in mini(limit, sim.records.size()):
+		var rec: AgentRecord = sim.records[i]
 		_agent_filter.add_item("%s (A%d)" % [rec.name, rec.id], rec.id)
+	if sim.records.size() > limit:
+		_agent_filter.add_item("… %d weitere" % (sim.records.size() - limit), -1)
 	if view_state != null and view_state.chronicle_filter_agent_id > 0:
 		for i in _agent_filter.item_count:
 			if _agent_filter.get_item_id(i) == view_state.chronicle_filter_agent_id:
@@ -191,9 +198,12 @@ func _populate_household_filter() -> void:
 	_household_filter.add_item("Alle Haushalte", 0)
 	if sim == null:
 		return
-	for household in sim.households:
-		var h: HouseholdRecord = household
+	var limit: int = 500 if sim.households.size() > 1000 else sim.households.size()
+	for i in mini(limit, sim.households.size()):
+		var h: HouseholdRecord = sim.households[i]
 		_household_filter.add_item("H%d" % h.id, h.id)
+	if sim.households.size() > limit:
+		_household_filter.add_item("… %d weitere" % (sim.households.size() - limit), -1)
 	if view_state != null and view_state.chronicle_filter_household_id > 0:
 		for i in _household_filter.item_count:
 			if _household_filter.get_item_id(i) == view_state.chronicle_filter_household_id:
@@ -246,6 +256,10 @@ func refresh(p_sim: Simulation, force: bool = false) -> void:
 		return
 	var now_ms: int = Time.get_ticks_msec()
 	var throttle_ms: int = 1000 if sim.config.is_g3() else 250
+	if sim.config.is_scale():
+		# 10k: Story/Alerts/Chronik-Queries sind teurer; 5-s-Refresh hält die
+		# UI aktuell, ohne den Frame-P99 zu dominieren.
+		throttle_ms = 5000
 	if not force and now_ms - _last_refresh_ms < throttle_ms:
 		return
 	_last_refresh_ms = now_ms

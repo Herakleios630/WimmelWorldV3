@@ -14,6 +14,10 @@ extends RefCounted
 ## Werkstätten, Kornspeicher, Brunnen, Scheune, Wegen und einem deterministischen
 ## Chunk-Index. Der Chunk-Index ist abgeleitet und nur für Materialisierung/
 ## Darstellung; die Simulation bleibt kameraunabhängig.
+##
+## SCALE (PROFILE_SCALE): 2048x2048-Stadt mit 2.000 Häusern, 200 Feldern,
+## drei Werkstätten, Kornspeicher, Brunnen, Scheune und Wegen. Alle Indizes
+## sind deterministisch aus dem Layout abgeleitet.
 
 const SIZE: int = SimConfig.MAP_SIZE
 const IDX_EMPTY: int = -1
@@ -49,6 +53,10 @@ var _granary_id: int = B_GRANARY
 var _well_id: int = B_WELL
 var _workshop_id: int = B_WORKSHOP
 var _barn_id: int = -1
+var _road_rects: Array = []
+var _building_by_id: Dictionary = {}
+var _field_work_by_id: Dictionary = {}
+var _chunk_by_tile: PackedInt32Array = PackedInt32Array()
 
 # Abgeleiteter Chunk-Index (nicht im Save): 1 = Chunk enthält Siedlungs-/
 ## Wege-/Feldmaterial. Die Simulation liest keine Kamera/Sichtbarkeit.
@@ -63,6 +71,8 @@ func _init(seed_value: int = 1, p_profile: int = SimConfig.PROFILE_G1,
 	profile = p_profile
 	if p_size > 0:
 		size = p_size
+	elif profile == SimConfig.PROFILE_SCALE:
+		size = SimConfig.MAP_SIZE_SCALE
 	elif profile == SimConfig.PROFILE_G3:
 		size = SimConfig.MAP_SIZE_G3
 	elif profile == SimConfig.PROFILE_G2:
@@ -71,7 +81,9 @@ func _init(seed_value: int = 1, p_profile: int = SimConfig.PROFILE_G1,
 		size = SimConfig.MAP_SIZE
 	occupied.resize(size * size)
 	road.resize(size * size)
-	if profile == SimConfig.PROFILE_G3:
+	if profile == SimConfig.PROFILE_SCALE:
+		_build_scale_settlement()
+	elif profile == SimConfig.PROFILE_G3:
 		_build_g3_settlement()
 	elif profile == SimConfig.PROFILE_G2:
 		_build_g2_settlement()
@@ -79,6 +91,7 @@ func _init(seed_value: int = 1, p_profile: int = SimConfig.PROFILE_G1,
 		_build_buildings()
 		_build_roads()
 		_build_graph()
+	_rebuild_lookup_indices()
 	_build_chunk_index()
 	_scatter_decor(seed_value)
 
@@ -270,27 +283,114 @@ func _build_g3_settlement() -> void:
 	plaza_point = Vector2(700.5, 375.5)
 
 
+## 10k-Stadt: 2.000 Häuser in 40x50, 200 Felder in 20x10, drei Werkstätten,
+## Kornspeicher, Scheune und Brunnen. Jede Haustür liegt auf einer Querstraße.
+func _build_scale_settlement() -> void:
+	var next_id: int = 1
+	for row in 50:
+		for col in 40:
+			var x: int = 160 + col * 16
+			var y: int = 160 + row * 16
+			buildings.append(Building.new(next_id, Building.KIND_HOUSE,
+				"Haus %d" % next_id, Rect2i(x, y, 8, 8),
+				Vector2i(x + 4, y + 8)))
+			_house_ids.append(next_id)
+			next_id += 1
+	for row in 50:
+		_road_rect(Rect2i(152, 160 + row * 16 + 8, 648, 3))
+	for col in 10:
+		_road_rect(Rect2i(157 + col * 64, 152, 3, 800))
+	# 200 Felder in 20 Spalten x 10 Reihen (24x24 Tiles, 6 Tiles Abstand).
+	for f_row in 10:
+		for f_col in 20:
+			var fx: int = 1120 + f_col * 30
+			var fy: int = 200 + f_row * 30
+			var fid: int = next_id
+			next_id += 1
+			buildings.append(Building.new(fid, Building.KIND_FIELD,
+				"Feld %d" % (f_row * 20 + f_col + 1),
+				Rect2i(fx, fy, 24, 24), Vector2i(fx - 1, fy + 12)))
+			_field_ids.append(fid)
+			_field_work_points.append(Vector2(float(fx) + 12.5,
+				float(fy) + 12.5))
+	_granary_id = next_id
+	buildings.append(Building.new(_granary_id, Building.KIND_GRANARY,
+		"Kornspeicher", Rect2i(1120, 560, 24, 16), Vector2i(1132, 576)))
+	next_id += 1
+	_barn_id = next_id
+	buildings.append(Building.new(_barn_id, Building.KIND_BARN, "Scheune",
+		Rect2i(1150, 560, 20, 14), Vector2i(1160, 574)))
+	next_id += 1
+	_well_id = next_id
+	buildings.append(Building.new(_well_id, Building.KIND_WELL, "Brunnen",
+		Rect2i(1120, 600, 4, 4), Vector2i(1120, 604)))
+	next_id += 1
+	for w in 3:
+		var wid: int = next_id
+		next_id += 1
+		_workshop_ids.append(wid)
+		buildings.append(Building.new(wid, Building.KIND_WORKSHOP,
+			"Werkstatt %d" % (w + 1),
+			Rect2i(1130 + w * 30, 620, 14, 10),
+			Vector2i(1137 + w * 30, 630)))
+	_workshop_id = _workshop_ids[0]
+	for building in buildings:
+		var b: Building = building
+		if b.kind == Building.KIND_FIELD:
+			continue
+		for y in range(b.rect.position.y, b.rect.position.y + b.rect.size.y):
+			for x in range(b.rect.position.x, b.rect.position.x + b.rect.size.x):
+				if x >= 0 and x < size and y >= 0 and y < size:
+					occupied[_idx(x, y)] = 1
+	# Wege zwischen Stadt, Feldern und Versorgungsgebäuden.
+	_road_rect(Rect2i(733, 560, 387, 3))
+	_road_rect(Rect2i(1108, 200, 3, 460))
+	_road_rect(Rect2i(1100, 576, 260, 3))
+	_road_rect(Rect2i(1100, 604, 260, 3))
+	_road_rect(Rect2i(1100, 630, 260, 3))
+	field_work_point = _field_work_points[0]
+	plaza_point = Vector2(1102.5, 612.5)
+
+
+func _rebuild_lookup_indices() -> void:
+	_building_by_id.clear()
+	_field_work_by_id.clear()
+	for building in buildings:
+		var b: Building = building
+		_building_by_id[b.id] = b
+	for i in _field_ids.size():
+		_field_work_by_id[_field_ids[i]] = _field_work_points[i]
+
+
 ## Leitet den Chunk-Index aus dem autoritativen Siedlungszustand ab. Chunks
 ## mit Gebäuden, Wegen oder Feldern gelten als materialisiert; die Auswahl ist
-## deterministisch und hängt nicht von der Kamera ab.
+## deterministisch und hängt nicht von der Kamera ab. Die Markierung erfolgt
+## über Rechteckbereiche, damit die 2048er-Welt nicht 4 Mio. Tiles scannen muss.
 func _build_chunk_index() -> void:
 	chunk_count_x = int(ceil(float(size) / float(chunk_size)))
 	chunk_count_y = chunk_count_x
 	chunk_active.resize(chunk_count_x * chunk_count_y)
 	chunk_active.fill(0)
-	for y in size:
-		for x in size:
-			if road[_idx(x, y)] == 0:
-				continue
-			_mark_chunk(x, y)
+	for rect in _road_rects:
+		_mark_rect_chunks(rect as Rect2i)
 	for building in buildings:
-		var b: Building = building
-		for y in range(b.rect.position.y, b.rect.position.y + b.rect.size.y):
-			for x in range(b.rect.position.x, b.rect.position.x + b.rect.size.x):
-				if b.kind == Building.KIND_FIELD:
-					_mark_chunk(x, y)
-				elif x >= 0 and x < size and y >= 0 and y < size:
-					_mark_chunk(x, y)
+		_mark_rect_chunks((building as Building).rect)
+
+
+func _mark_rect_chunks(rect: Rect2i) -> void:
+	if rect.size.x <= 0 or rect.size.y <= 0:
+		return
+	var x0: int = clampi(rect.position.x, 0, size - 1)
+	var y0: int = clampi(rect.position.y, 0, size - 1)
+	var x1: int = clampi(rect.position.x + rect.size.x - 1, 0, size - 1)
+	var y1: int = clampi(rect.position.y + rect.size.y - 1, 0, size - 1)
+	var cx0: int = x0 / chunk_size
+	var cy0: int = y0 / chunk_size
+	var cx1: int = x1 / chunk_size
+	var cy1: int = y1 / chunk_size
+	for cy in range(cy0, cy1 + 1):
+		for cx in range(cx0, cx1 + 1):
+			chunk_active[cy * chunk_count_x + cx] = 1
 
 
 func _mark_chunk(x: int, y: int) -> void:
@@ -342,6 +442,7 @@ func _build_roads() -> void:
 
 
 func _road_rect(rect: Rect2i) -> void:
+	_road_rects.append(rect)
 	for y in range(rect.position.y, rect.position.y + rect.size.y):
 		for x in range(rect.position.x, rect.position.x + rect.size.x):
 			if x >= 0 and x < size and y >= 0 and y < size:
@@ -388,6 +489,9 @@ func _scatter_decor(seed_value: int) -> void:
 	elif profile == SimConfig.PROFILE_G3:
 		target_count = 700
 		guard_max = 40000
+	elif profile == SimConfig.PROFILE_SCALE:
+		target_count = 1200
+		guard_max = 120000
 	var placed: int = 0
 	var guard: int = 0
 	while placed < target_count and guard < guard_max:
@@ -403,6 +507,9 @@ func _scatter_decor(seed_value: int) -> void:
 			# Bebaute Siedlungsfläche freihalten; Bäume nur am Rand.
 			if x >= 40 and x <= 760 and y >= 40 and y <= 570:
 				continue
+		elif profile == SimConfig.PROFILE_SCALE:
+			if x >= 100 and x <= 1900 and y >= 100 and y <= 800:
+				continue
 		else:
 			if x >= 38 and x <= 108 and y >= 50 and y <= 90:
 				continue
@@ -415,10 +522,7 @@ func _idx(x: int, y: int) -> int:
 
 
 func building_by_id(building_id: int) -> Building:
-	for building in buildings:
-		if (building as Building).id == building_id:
-			return building
-	return null
+	return _building_by_id.get(building_id, null) as Building
 
 
 func building_name(building_id: int) -> String:
@@ -583,10 +687,8 @@ func field_ids() -> PackedInt32Array:
 
 
 func field_work_point_for(field_id: int) -> Vector2:
-	var idx: int = _field_ids.find(field_id)
-	if idx < 0:
-		return field_work_point
-	return _field_work_points[idx]
+	var point = _field_work_by_id.get(field_id, field_work_point)
+	return point
 
 
 func granary_id() -> int:
@@ -613,6 +715,27 @@ func workshop_id_for_row(row: int) -> int:
 
 func barn_id() -> int:
 	return _barn_id
+
+
+## Alle Off-Road-Ziele des 10k-Profils, die für A* an die Straßen
+## angebunden werden müssen. Reine Geometrie, deterministisch, nicht im Save.
+func scale_field_points() -> PackedVector2Array:
+	return _field_work_points.duplicate()
+
+
+func scale_path_anchors() -> PackedVector2Array:
+	var out: PackedVector2Array = PackedVector2Array()
+	for wid in _workshop_ids:
+		out.append(door_point(wid))
+	out.append(door_point(_well_id))
+	for i in 3:
+		out.append(clamp_point(door_point(_well_id) + Vector2(
+			float(i - 1) * 0.8, 0.0)))
+	for dx in 5:
+		for dy in 2:
+			out.append(clamp_point(plaza_point + Vector2(
+				float(dx - 2) * 1.0, float(dy) * 1.5)))
+	return out
 
 
 func workplace_ids() -> PackedInt32Array:
