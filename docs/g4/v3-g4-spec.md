@@ -28,23 +28,32 @@ G4 ist **kein** 100k-Gate; B bleibt separater 150x-Modus.
 
 ### Kalender/Felder
 - 120-Tage-Jahr, 4×30 Seasons; saisonale Felder wie G3.
-- Ein Feld = eine Ernte/Jahr; Feldanzahl skaliert mit Population
-  (Platzhalter: 200 Felder für 10k).
+- Ein Feld = eine Ernte/Jahr; **200 Felder** für 10k.
+- Platzhalter-Balance: 20.000 Brutto, 2.000 Saatgut, 18.000 Netto/Feld;
+  200 Felder = 3,6 Mio. Netto/Jahr; 10k × 3 Mahlzeiten × 120 Tage =
+  3,6 Mio. Mahlzeiten. Startgrain **3,6 Mio.**, Granary **7,2 Mio.**
 - Keine Ernte außerhalb des Herbstfensters.
 
 ### Pfad/Chunks/Save
 - A*/Cache/Chunking unter 10k; Pfadbudget; Cache-Hit > 90 %.
 - Kein Full-Agent-Sweep pro Frame; Event-Batching.
 - Save-Schema **7**; Schema 1–6 ablehnen; Pfad-Cache nicht speichern.
+- Provisorische Save-Budgets: ≤ 30 MB, Save ≤ 2 s, Load ≤ 10 s.
 - 120-Tage-Determinismus, 3 Läufe; Save/Load mitten in Feldphase/Bewegung/
   Geburt/Tod.
+- **Vor 10k:** `decision_system.gd` (G3: 880 Zeilen) in arbeits-/feld-/
+  entscheidungsnahe Module aufteilen; G3-Suiten müssen grün bleiben.
 
 ### Abnahme G4a
 - 10k@50x: p95 ≤ 16 ms, p99 ≤ 20 ms, 60 FPS; 5-Minuten-Fenster, 3 Läufe.
 - 120-Tage-headless: 3 Läufe identisch; 200 Ernten im Herbst, 0 außerhalb.
-- Save/Load exakt; kein Leak.
+- Save/Load exakt; Budgets eingehalten; kein Leak.
 - D-57 nur Stubs; keine G4b-Systeme.
-- Tag `g4a`.
+- G1a/G1b/G2/G3-Suiten unverändert grün.
+- **Abbruchregel:** Wenn 10k@50x nach dokumentierten Optimierungen p95
+  ≤ 16 ms nicht erreicht, wird **kein `g4a`-Tag** gesetzt; der grüne
+  `g3`-Stand bleibt Rückfall. Ein 10k@10x-Lauf dient nur als Diagnose.
+- Tag `g4a` nur bei vollständiger Abnahme.
 
 ## 3. G4b — 10k + Wirtschaft/Politik
 
@@ -75,9 +84,17 @@ G4 ist **kein** 100k-Gate; B bleibt separater 150x-Modus.
 
 ## 4. Tests
 
-- G4a: T-G4a-01..10 (Welt/Population, Kalender/Felder, A*/Chunk, Batching,
-  120-Tage-Determinismus, Save/Load Schema 7, 10k@50x, UI/Chronik, Leaks,
-  keine G4b-Systeme).
+- G4a:
+  - T-G4a-01: 10k Agenten, 2.000 Haushalte, 2.048²-Welt, 200 Felder.
+  - T-G4a-02: 120-Tage-Kalender/4×30 Seasons.
+  - T-G4a-03: 200 Herbsternten, 0 außerhalb; Jahresbilanz.
+  - T-G4a-04: A*/Cache/Chunking bei 10k.
+  - T-G4a-05: Event-Batching, stabile Ordnung.
+  - T-G4a-06: 120-Tage-Determinismus, 3 Läufe.
+  - T-G4a-07: Save/Load Schema 7, alte Schemas abgelehnt.
+  - T-G4a-08: 10k@50x p95 ≤ 16 ms, 3 Läufe.
+  - T-G4a-09: UI/Chronik bei 10k.
+  - T-G4a-10: D-57-Stubs, keine G4b-Systeme, G1–G3-Regression.
 - G4b: T-G4b-01..12 (Haushalte/Budget, Markt/Preise, Karawanen, Steuern/
   Budget, Diplomatie/Verträge, Krisen, Chronik, Determinismus, Save/Load
   Schema 8, 10k@50x, keine Kriege, Regression).
