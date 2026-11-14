@@ -1,6 +1,6 @@
 # WimmelWorld V3
 
-Status: **G3 bestanden (2026-11-14); G4a startet.**  
+Status: **G4a läuft (10k-Kern); G3 ist Rückfall (`g3`).**  
 G0.5, G1, G2, B-Spike und G3 sind abgeschlossen.
 
 ## Was V3 ist
