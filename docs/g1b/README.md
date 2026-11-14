@@ -1,7 +1,7 @@
-# V3 G1b — Schritt 1 und Schritt 2
+# V3 G1b — Schritt 1, Schritt 2 und Schritt 3
 
-Status: **G1b Schritt 1 und Schritt 2 bestanden (Review 2026-11-13); Schritt 3
-offen; Commit folgt**  
+Status: **G1b Schritte 1–3 bestanden; G1 abgeschlossen (Review 2026-11-14);
+Commit folgt**  
 Bezug: `docs/v3-g1-spec.md`, `docs/v3-g1-workpackages.md`,
 `docs/v3-architecture.md`, `docs/v3-data-model.md`,
 `docs/g1a/v3-g1a-report.md`
@@ -10,6 +10,8 @@ Bezug: `docs/v3-g1-spec.md`, `docs/v3-g1-workpackages.md`,
 
 - `v3-g1b-step1-report.md` — Needs, Gesundheit, voller Feldzyklus.
 - `v3-g1b-step2-report.md` — Lebenszyklus, Demografie, Haushaltsauflösung.
+- `v3-g1b-step3-report.md` — kuratierte Chronik, Beobachtungs-UI, Replay,
+  Save-Schema 4 und finale G1b-Abnahme.
 
 ## Umfang Schritt 1
 
@@ -39,11 +41,27 @@ Bezug: `docs/v3-g1-spec.md`, `docs/v3-g1-workpackages.md`,
 - Visueller 1-Jahres-Lauf mit **Featured Seed 34** (mindestens eine Geburt und
   ein Tod, ≥ 50 % lebend).
 
-## Nicht in Schritt 2
+## Umfang Schritt 3
 
-- Kein Familienbaum, Follow, Alerts, Story of the Day, Chronik-UI, Replay.
-- Keine Krankheit/Gewalt/Kriege/Tiere/Fantasy/Wirtschaft/Politik.
-- Keine A*-/Pfad-Cache-Abhängigkeit.
+- Kuratierte Chronik statt rohem Event-Log: Event-Taxonomie, Importance,
+  Dedup/Aggregation, Tagesdigest, Story of the Day, Kausalitätslinks.
+- Ebenen Individuum, Familie und Siedlung; Nation erst G5.
+- Deutsche Template-Texte, keine LLM-/Netzwerkabhängigkeit.
+- Familienbaum (>= 3 Generationen, tote Agenten als historische Knoten),
+  Follow-Modus, Alerts, Story of the Day, Chronik-Panel mit Filtern,
+  Basis-Biografie im Inspector.
+- Replay als Re-Simulation aus Seed + Konfiguration + Save-Snapshot;
+  Log-Kürzung verändert den Verlauf nicht.
+- Retention: 7 Sim-Tage notable+ im Ringpuffer, Tages-Summaries für 1 Sim-Jahr,
+  historische Events budgetiert; Routine an der Quelle aggregiert.
+- Save-Schema **4**; Schema 1–3 werden sichtbar abgelehnt.
+
+## Nicht in Schritt 3 / G2
+
+- Keine Siedlungs-/Nationen-Chronik, Lesezeichen, Sammlungen oder Zeitleiste.
+- Kein A*/Pfad-Cache, keine Wirtschaft/Politik/Tiere/Fantasy.
+- Keine Krankheit/Gewalt/Kriege.
+- Kein Spielereingriff, kein Rewind/Scrubbing.
 
 ## Tests ausführen
 
@@ -62,11 +80,14 @@ $godot = "C:\Users\ajsch\AppData\Local\Microsoft\WinGet\Packages\GodotEngine.God
 # 4) G1a-Gate (29 Test-IDs)
 & $godot --headless --path C:\coding\WimmelWorld\V3 res://tests/g1a/g1a_suite.tscn
 
-# 5) G1b-Gate (Schritt 1 + Schritt 2; 15 Test-IDs)
+# 5) G1b-Gate (Schritt 1 + 2 + 3; 28 Test-IDs)
 & $godot --headless --path C:\coding\WimmelWorld\V3 res://tests/g1b/g1b_suite.tscn
 
-# 6) Visueller Smoke-Screenshot
+# 6) Visueller Smoke-Screenshot (G1a-Demo)
 & $godot --path C:\coding\WimmelWorld\V3 res://tests/g1a/capture_demo.tscn
+
+# 7) Sichtbarer Chronik-/Familienbaum-/Follow-Smoke
+& $godot --path C:\coding\WimmelWorld\V3 res://tests/g1b/capture_chronicle.tscn
 
 # Optional: Seed-Suche (kein Gate)
 & $godot --headless --path C:\coding\WimmelWorld\V3 res://tests/g1b/seed_search.tscn
@@ -75,10 +96,10 @@ $godot = "C:\Users\ajsch\AppData\Local\Microsoft\WinGet\Packages\GodotEngine.God
 ## Erwartete Gates
 
 ```text
-G1A_SUITE results=29 passed=29 failed=0 checks=254
+G1A_SUITE results=29 passed=29 failed=0 checks=260
 G1A_SUITE_OK
 
-G1B_SUITE results=15 passed=15 failed=0 checks=248
+G1B_SUITE results=28 passed=28 failed=0 checks=792
 G1B_SUITE_OK
 ```
 
@@ -111,10 +132,26 @@ Zusätzlich bleibt der G0.5-Spike unverändert:
   10 Lebende insgesamt; erste Geburt und erster Tod an Lifecycle-Tag 20
   (Anzeige Tag 21 00:00); Grain 182,
   ID 8 Gustav (Spec-A5) Gesundheit 80,1.
-- Visueller Jahreslauf @50x: 30,000 Sim-Tage in 540,0 s,
+- Visueller Jahreslauf @50x: 30,0 Sim-Tage in 540,0 s,
   **p95 5,106 ms**, **224,2 FPS**, 665,3 Draw Calls Ø, max. 285,9 ms
   (Screenshot-Hitch; ohne Capture max. 10,6 ms im G1a-Bench).
 - G1a-Bench @50x: **p95 5,086 ms**, **225,1 FPS**, 666,0 Draw Calls Ø,
   max. 10,641 ms.
 - Save Schema 3: **13.506 Bytes**, Save **1,01 ms**, Load **7,77 ms**
   (Seed 1337, Tag 1 12:05).
+
+### Schritt 3 (Featured Seed 34 / Seed 1337)
+
+- Ein Sim-Jahr (Featured Seed 34): 30,0 Sim-Tage in 540,0 s,
+  **2 Geburten, 2 Tode, 10 Lebende** (8/10 Startagenten), Grain 182.
+- Visueller Jahreslauf @50x: **p95 5,319 ms**, **p99 7,208 ms**,
+  **219,5 FPS**, 694,2 Draw Calls Ø, 5.850 Events, 117.414 Frames.
+- Chronik: **88 Events**, **30 Summaries**, **1 Historic**,
+  **72 Kausalitäts-Anker**, **Dedup-Ratio 99,1 %**;
+  **Alerts max. 10/Tag**, **Story max. 7/Tag**.
+- G1a-Bench @50x: **p95 5,107 ms**, **225,0 FPS**, 666 Draw Calls Ø,
+  max. 10,429 ms.
+- Save Schema 4: **16.835 Bytes**, Save **1,25 ms**, Load **7,66 ms**
+  (Seed 1337, Tag 1 12:05).
+- Sichtbare Screenshots: `bench/results/g1b_chronicle_ui.png`,
+  `g1b_family_tree.png`, `g1b_year_birth.png`, `g1b_year_death.png`.

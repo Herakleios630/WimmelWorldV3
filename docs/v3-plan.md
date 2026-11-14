@@ -1,7 +1,7 @@
 # WimmelWorld V3 — Planung
 
-Status: G1b Schritte 1–2 bestanden; Schritt 3 (Chronik/Beobachtung) bereit  
-Stand: 2026-11-13  
+Status: G1 abgeschlossen (2026-11-14); G2 bereit, Freigabe offen  
+Stand: 2026-11-14  
 Arbeitsmodus: **Nur Analyse und Planung. Kein Code, keine Implementierung, keine Änderung an V1/V2.**
 
 > **Externes Review 2026-11-13:** `reviews/v3-review-2026-11-13.md`.
@@ -445,8 +445,8 @@ sichtbare Demo und Review. „PARTIAL“ ist kein Abschluss.
 | **G5b** | 100.000 Systeme | Märkte, Karawanen, Steuern, Budget, Diplomatie, Krisen | Systembilanz + Chronik |
 | **G6** | Erweiterungen | Krieg, Wildtiere, Fantasy-Addons, Cursed Beyond | Separate Planung |
 
-**Stand 2026-11-13:** G0 bestanden; G0.5 bestanden; G1a/G1a.1 bestanden;
-G1b Schritte 1–2 bestanden, Schritt 3 offen.
+**Stand 2026-11-14:** G0 bestanden; G0.5 bestanden; G1a/G1a.1 bestanden;
+G1b Schritte 1–3 bestanden; **G1 abgeschlossen**; G2 als Nächstes.
 
 **Wichtig:** G1a/G1b sind formale Gates; G1a ist kein halbes G1. G0.5 ist der
 Machbarkeitsnachweis vor dem ersten Gameplay-Code. G4a/G5a sind

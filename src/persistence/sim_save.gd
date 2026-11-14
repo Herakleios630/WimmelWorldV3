@@ -9,8 +9,8 @@ extends RefCounted
 ##         PAYLOAD_SIZE u64
 
 const MAGIC: int = 0x57473141
-const SCHEMA_VERSION: int = 3
-const GAME_VERSION: int = 3
+const SCHEMA_VERSION: int = 4
+const GAME_VERSION: int = 4
 const HEADER_SIZE: int = 28
 const MAX_ARRAY: int = 2000000
 
@@ -39,7 +39,10 @@ static func save_simulation(sim: Simulation, path: String) -> Dictionary:
 	file.close()
 	var elapsed: float = float(Time.get_ticks_usec() - t0) / 1000.0
 	return {"ok": true, "path": path, "bytes": writer.size(),
-		"save_ms": elapsed, "schema": SCHEMA_VERSION, "config_hash": sim.config.config_hash()}
+		"save_ms": elapsed, "schema": SCHEMA_VERSION,
+		"config_hash": sim.config.config_hash(),
+		"replay_meta": Replay.replay_meta(sim),
+		"chronicle_budget": sim.chronicle.budget_info()}
 
 
 static func load_simulation(path: String) -> Dictionary:
@@ -131,6 +134,18 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 	sim.last_year_end_grain = reader.i64()
 	sim.routes = _read_routes(reader)
 	_read_logs(reader, sim)
+	sim.chronicle = ChronicleStore.read_from(reader, config)
+	var replay_version: int = reader.i32()
+	var replay_seed: int = reader.i64()
+	var replay_config_hash: int = reader.i64()
+	var replay_snapshot_time: int = reader.i64()
+	sim.replay_meta = {
+		"version": replay_version,
+		"seed": replay_seed,
+		"config_hash": replay_config_hash,
+		"snapshot_time": replay_snapshot_time,
+		"source": "seed_config_snapshot",
+	}
 	sim.decisions = DecisionSystem.new(sim)
 	sim.rebuild_runtime()
 	if not reader.ok:
@@ -138,7 +153,8 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 	if reader.remaining() != 0:
 		return {"ok": false, "error": "trailing_bytes", "remaining": reader.remaining()}
 	return {"ok": true, "sim": sim, "schema": schema, "game_version": game_version,
-		"config_hash": config_hash}
+		"config_hash": config_hash, "replay_meta": sim.replay_meta.duplicate(),
+		"chronicle_budget": sim.chronicle.budget_info()}
 
 
 static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
@@ -200,6 +216,13 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 	w.f64(config.monthly_conception_chance)
 	w.i64(config.pregnancy_ticks)
 	w.f64(config.birth_death_chance)
+	w.i64(config.chronicle_recent_days)
+	w.i64(config.chronicle_recent_max_events)
+	w.i64(config.chronicle_summary_days)
+	w.i64(config.chronicle_summary_max)
+	w.i64(config.chronicle_historic_max)
+	w.i64(config.chronicle_story_max_per_day)
+	w.i64(config.chronicle_alert_max_per_day)
 
 	w.i64(sim.clock.now)
 	var sched: EventScheduler = sim.scheduler
@@ -259,6 +282,15 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 			w.f64(p.y)
 
 	_write_logs(w, sim.logs)
+	var chronicle: ChronicleStore = sim.chronicle
+	if chronicle == null:
+		chronicle = ChronicleStore.new(config)
+	chronicle.write_to(w)
+	var meta: Dictionary = Replay.replay_meta(sim)
+	w.i32(int(meta["version"]))
+	w.i64(int(meta["seed"]))
+	w.i64(int(meta["config_hash"]))
+	w.i64(int(meta["snapshot_time"]))
 
 
 static func _write_store(w: ByteWriter, store: AgentStore) -> void:
@@ -612,6 +644,13 @@ static func _read_config(r: ByteReader) -> SimConfig:
 	config.monthly_conception_chance = r.f64()
 	config.pregnancy_ticks = r.i64()
 	config.birth_death_chance = r.f64()
+	config.chronicle_recent_days = r.i64()
+	config.chronicle_recent_max_events = r.i64()
+	config.chronicle_summary_days = r.i64()
+	config.chronicle_summary_max = r.i64()
+	config.chronicle_historic_max = r.i64()
+	config.chronicle_story_max_per_day = r.i64()
+	config.chronicle_alert_max_per_day = r.i64()
 	return config
 
 

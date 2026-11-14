@@ -14,6 +14,7 @@ var view_state: ViewState
 var world_view: WorldView
 var camera: GameCamera
 var hud: Hud
+var chronicle_hud: ChronicleHud
 
 var _start_sim_time: int = 0
 var _start_real_ms: int = 0
@@ -61,12 +62,15 @@ func _ready() -> void:
 	world_view.configure(sim, view_state)
 	camera = GameCamera.new()
 	add_child(camera)
-	camera.configure(view_state)
+	camera.configure(view_state, sim)
 	camera.enabled = true
 	camera.make_current()
 	hud = Hud.new()
 	add_child(hud)
 	hud.configure(view_state)
+	chronicle_hud = ChronicleHud.new()
+	add_child(chronicle_hud)
+	chronicle_hud.configure(sim, view_state)
 	_last_tick_ms = Time.get_ticks_usec()
 	print("VISUAL_YEAR start seed=%d agents=%d speed=50 vsync=off window=%s target_days=30" % [
 		FeaturedSeed.FEATURED_SEED, sim.store.count, str(DisplayServer.window_get_size())])
@@ -88,6 +92,7 @@ func _process(delta: float) -> void:
 				_capture_frames = 24
 		world_view.queue_redraw()
 		hud.refresh(sim)
+		chronicle_hud.refresh(sim, true)
 		return
 	var now_usec: int = Time.get_ticks_usec()
 	var frame_ms: float = float(now_usec - _last_tick_ms) / 1000.0
@@ -113,6 +118,7 @@ func _process(delta: float) -> void:
 	if _hud_timer >= 0.1:
 		_hud_timer = 0.0
 		hud.refresh(sim)
+		chronicle_hud.refresh(sim)
 	if _elapsed >= WARMUP_S:
 		_samples.append(frame_ms)
 		_draw_samples.append(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
@@ -201,9 +207,19 @@ func _finish() -> void:
 	if _draw_samples.size() > 0:
 		draw_avg /= float(_draw_samples.size())
 	var alive: int = sim.count_alive()
+	var max_alerts: int = 0
+	var max_story: int = 0
+	for day in range(0, maxi(0, sim.clock.day_index())):
+		max_alerts = maxi(max_alerts,
+			AlertModel.count_for_day(sim.chronicle, day))
+		max_story = maxi(max_story,
+			StoryOfDay.for_day(sim.chronicle, sim, day, 1).size())
 	var result: Dictionary = {
 		"ok": p95 <= 16.0 and fps_avg >= 55.0 and sim_days >= 29.5
-			and _births_seen >= 1 and _deaths_seen >= 1 and alive >= 5,
+			and _births_seen >= 1 and _deaths_seen >= 1 and alive >= 5
+			and max_alerts <= sim.config.chronicle_alert_max_per_day
+			and max_story <= sim.config.chronicle_story_max_per_day
+			and sim.chronicle.dedup_ratio() > 0.8,
 		"seed": FeaturedSeed.FEATURED_SEED,
 		"agents": 10,
 		"final_count": sim.store.count,
@@ -225,6 +241,15 @@ func _finish() -> void:
 		"draw_calls_avg": draw_avg,
 		"draw_calls_max": draw_max,
 		"grain": sim.grain,
+		"chronicle_events": sim.chronicle.stored_event_count(),
+		"chronicle_summaries": sim.chronicle.summaries.size(),
+		"chronicle_historic": sim.chronicle.historic.size(),
+		"chronicle_anchors": sim.chronicle.anchors.size(),
+		"dedup_ratio": sim.chronicle.dedup_ratio(),
+		"max_alerts_per_day": max_alerts,
+		"max_story_per_day": max_story,
+		"curated_hash": HashUtil.hex(sim.curated_chronicle_hash()),
+		"replay_meta": Replay.replay_meta(sim),
 		"vsync": "disabled",
 		"window": str(DisplayServer.window_get_size()),
 		"godot": Engine.get_version_info().get("string", "?"),

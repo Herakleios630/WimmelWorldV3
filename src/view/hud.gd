@@ -86,8 +86,8 @@ func _build() -> void:
 	# Inspector links
 	var inspector: PanelContainer = PanelContainer.new()
 	inspector.position = Vector2(12, 60)
-	inspector.size = Vector2(310, 470)
-	inspector.custom_minimum_size = Vector2(310, 440)
+	inspector.size = Vector2(310, 540)
+	inspector.custom_minimum_size = Vector2(310, 500)
 	inspector.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.add_child(inspector)
 	var inspector_margin: MarginContainer = MarginContainer.new()
@@ -106,7 +106,7 @@ func _build() -> void:
 	_inspector_body = RichTextLabel.new()
 	_inspector_body.bbcode_enabled = true
 	_inspector_body.fit_content = false
-	_inspector_body.custom_minimum_size = Vector2(290, 62)
+	_inspector_body.custom_minimum_size = Vector2(290, 128)
 	_inspector_body.scroll_active = false
 	inspector_box.add_child(_inspector_body)
 	for need in range(NeedsModel.NEED_COUNT):
@@ -227,10 +227,15 @@ func refresh(sim: Simulation) -> void:
 		else:
 			var pos: Vector2 = info["position"]
 			_inspector_title.text = "%s (A%d)" % [str(info["name"]), int(info["id"])]
-			_inspector_body.text = "%d Jahre · %s · Haushalt %d\n%s · %s\nAktivität: %s\nPosition: %.1f, %.1f" % [
+			var bio: PackedStringArray = info.get("biography", PackedStringArray())
+			var bio_lines: PackedStringArray = PackedStringArray()
+			for i in mini(3, bio.size()):
+				bio_lines.append(bio[i])
+			_inspector_body.text = "%d Jahre · %s · Haushalt %d · %s\n%s · %s\nAktivität: %s · Position: %.1f, %.1f\n[color=#c9c2a8]%s[/color]" % [
 				int(info["age"]), str(info["role_name"]), int(info["household_id"]),
-				str(info["home_name"]), str(info["job_name"]), str(info["activity_name"]),
-				pos.x, pos.y]
+				str(info.get("status_line", "")), str(info["home_name"]),
+				str(info["job_name"]), str(info["activity_name"]),
+				pos.x, pos.y, "\n".join(bio_lines)]
 			for need in range(NeedsModel.NEED_COUNT):
 				var value: float = _need_value_from_info(info, need)
 				(_need_bars[need] as ProgressBar).value = value

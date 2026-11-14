@@ -8,11 +8,13 @@ const ZOOM_MIN: float = 0.45
 const ZOOM_MAX: float = 4.0
 
 var view_state: ViewState
+var sim: Simulation
 var _dragging: bool = false
 
 
-func configure(p_view_state: ViewState) -> void:
+func configure(p_view_state: ViewState, p_sim: Simulation = null) -> void:
 	view_state = p_view_state
+	sim = p_sim
 	position = p_view_state.camera_position * SimConfig.PIXELS_PER_TILE
 	zoom = Vector2(p_view_state.zoom, p_view_state.zoom)
 
@@ -30,7 +32,14 @@ func _process(delta: float) -> void:
 	if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
 		dir.y += 1.0
 	if dir != Vector2.ZERO:
+		# Manuelles Pan beendet den Follow-Modus; das ist reine View-Politik.
+		view_state.follow_enabled = false
 		position += dir.normalized() * PAN_SPEED * delta / zoom.x
+		_clamp_position()
+	elif view_state.follow_enabled and sim != null \
+			and FollowModel.has_target(sim, view_state.follow_agent_id):
+		var target: Vector2 = FollowModel.target_tile(sim, view_state.follow_agent_id)
+		position = target * SimConfig.PIXELS_PER_TILE
 		_clamp_position()
 	view_state.camera_position = position / SimConfig.PIXELS_PER_TILE
 	view_state.zoom = zoom.x

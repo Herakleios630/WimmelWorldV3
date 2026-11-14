@@ -16,6 +16,7 @@ static func for_agent(sim: Simulation, agent_id: int) -> Dictionary:
 	var now: int = sim.clock.now
 	var pos: Vector2 = sim.current_position(row)
 	var role: int = sim.store.role[row]
+	var biography: PackedStringArray = BiographyModel.for_agent(sim, agent_id)
 	return {
 		"id": agent_id,
 		"name": rec.name,
@@ -40,6 +41,9 @@ static func for_agent(sim: Simulation, agent_id: int) -> Dictionary:
 		"next_event": sim.store.next_event[row],
 		"dead": sim.store.alive[row] == 0,
 		"traveling": sim.store.activity[row] == AgentStore.ACT_TRAVEL,
+		"status_line": BiographyModel.status_line(sim, agent_id),
+		"biography": biography,
+		"biography_text": "\n".join(biography),
 	}
 
 

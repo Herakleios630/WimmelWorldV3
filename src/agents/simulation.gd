@@ -18,12 +18,14 @@ var routes: RouteStore
 var scheduler: EventScheduler
 var rng: RngStreams
 var logs: SimLogs
+var chronicle: ChronicleStore
 var decisions: DecisionSystem
 var lifecycle: LifecycleSystem
 
 var records: Array = []
 var households: Array = []
 var relationships: Array = []
+var replay_meta: Dictionary = {}
 
 var grain: int = 0
 var grain_produced: int = 0
@@ -70,6 +72,7 @@ func setup_new(p_config: SimConfig) -> void:
 	routes = RouteStore.new()
 	scheduler = EventScheduler.new()
 	logs = SimLogs.new()
+	chronicle = ChronicleStore.new(config)
 	decisions = DecisionSystem.new(self)
 	lifecycle = LifecycleSystem.new(self)
 	records = AgentRecords.default_agents()
@@ -101,9 +104,9 @@ func setup_new(p_config: SimConfig) -> void:
 	last_year_harvests = 0
 	last_year_end_grain = 0
 	_spawn_initial_agents()
-	logs.emit(clock.now, SimEvent.T_SIM_START, SimEvent.IMPORTANCE_NOTABLE,
+	log_event(SimEvent.T_SIM_START, SimEvent.IMPORTANCE_NOTABLE,
 		0, "sim_start", "G1b gestartet", config.seed)
-	logs.emit(clock.now, SimEvent.T_DAY_START, SimEvent.IMPORTANCE_ROUTINE,
+	log_event(SimEvent.T_DAY_START, SimEvent.IMPORTANCE_ROUTINE,
 		0, "day_start", "Tag beginnt", clock.day_index())
 	for row in store.count:
 		decisions.on_agent_wake(row)
@@ -150,7 +153,11 @@ func _dispatch(kind: int, payload: int) -> void:
 			decisions.on_agent_wake(row)
 	elif kind == SimKinds.EVENT_DAY_TICK:
 		var day: int = clock.day_index()
-		logs.emit(clock.now, SimEvent.T_DAY_START, SimEvent.IMPORTANCE_ROUTINE,
+		# Die Chronik finalisiert zuerst den abgelaufenen Tag. Das erzeugt
+		# keine Sim-Events und ändert keine Event-Reihenfolge.
+		if chronicle != null:
+			chronicle.on_day_tick(day, self)
+		log_event(SimEvent.T_DAY_START, SimEvent.IMPORTANCE_ROUTINE,
 			0, "day_start", "Tag beginnt", day)
 		lifecycle.on_day_tick(day)
 		if day > 0 and day % SimConfig.YEAR_DAYS == 0:
@@ -183,7 +190,11 @@ func _complete_year() -> void:
 
 func log_event(type: int, importance: int, agent_id: int, template_key: String,
 		text: String = "", data: int = 0) -> SimEvent:
-	return logs.emit(clock.now, type, importance, agent_id, template_key, text, data)
+	var event: SimEvent = logs.emit(clock.now, type, importance, agent_id,
+		template_key, text, data)
+	if chronicle != null:
+		chronicle.ingest(event, self)
+	return event
 
 
 func request_wake_by_id(agent_id: int, at_time: int) -> void:
@@ -271,10 +282,18 @@ func chronicle_hash() -> int:
 	return logs.chronicle_hash()
 
 
+## Hash der kuratierten Chronik. Bewusst nicht Teil von state_hash: Kürzen
+## oder Löschen der Chronik darf den Simulationszustand nicht verändern.
+func curated_chronicle_hash() -> int:
+	return chronicle.state_hash() if chronicle != null else 0
+
+
 ## Wird nach einem Save-Restore aufgerufen: abgeleitete Laufzeitobjekte binden.
 func rebuild_runtime() -> void:
 	if world == null:
 		world = WorldMap.new(config.seed)
+	if chronicle == null:
+		chronicle = ChronicleStore.new(config)
 	decisions = DecisionSystem.new(self)
 	lifecycle = LifecycleSystem.new(self)
 

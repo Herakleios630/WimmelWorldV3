@@ -4,8 +4,8 @@ extends RefCounted
 ## G1b-Konfiguration. Nur autoritative Sim-Parameter.
 ## Kamera, Zoom, Sichtbarkeit und Speed sind bewusst NICHT enthalten.
 
-const SCHEMA_VERSION: int = 3
-const GAME_VERSION: int = 3
+const SCHEMA_VERSION: int = 4
+const GAME_VERSION: int = 4
 
 const TICKS_PER_DAY: int = 86400
 const MINUTES_PER_DAY: int = 1440
@@ -124,6 +124,18 @@ var field_harvest_work_s: int = FIELD_HARVEST_WORK_S
 var field_grow_s: int = FIELD_GROW_S
 var field_harvest_yield: int = FIELD_HARVEST_YIELD
 
+# G1b-Schritt 3: Chronik-/Retention-Budgets. Reine Darstellungs-/Speicher-
+# politik; sie beeinflussen weder Need- noch Lebenszyklusentscheidungen.
+# Die Byte-Budgets aus docs/v3-chronicle.md werden über die Anzahl-Reports
+# in ChronicleStore.budget_info() ausgewiesen.
+var chronicle_recent_days: int = 7
+var chronicle_recent_max_events: int = 250000
+var chronicle_summary_days: int = 30
+var chronicle_summary_max: int = 50000
+var chronicle_historic_max: int = 10000
+var chronicle_story_max_per_day: int = 7
+var chronicle_alert_max_per_day: int = 20
+
 
 func config_hash() -> int:
 	var h: int = HashUtil.FNV_OFFSET
@@ -187,4 +199,11 @@ func config_hash() -> int:
 	h = HashUtil.mix_i64(h, field_harvest_work_s)
 	h = HashUtil.mix_i64(h, field_grow_s)
 	h = HashUtil.mix_i64(h, field_harvest_yield)
+	h = HashUtil.mix_i64(h, chronicle_recent_days)
+	h = HashUtil.mix_i64(h, chronicle_recent_max_events)
+	h = HashUtil.mix_i64(h, chronicle_summary_days)
+	h = HashUtil.mix_i64(h, chronicle_summary_max)
+	h = HashUtil.mix_i64(h, chronicle_historic_max)
+	h = HashUtil.mix_i64(h, chronicle_story_max_per_day)
+	h = HashUtil.mix_i64(h, chronicle_alert_max_per_day)
 	return h

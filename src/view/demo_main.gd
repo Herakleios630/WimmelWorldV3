@@ -9,6 +9,7 @@ var view_state: ViewState
 var world_view: WorldView
 var camera: GameCamera
 var hud: Hud
+var chronicle_hud: ChronicleHud
 
 var _sim_accumulator: float = 0.0
 var _last_load_message: String = ""
@@ -25,7 +26,7 @@ func _ready() -> void:
 	world_view.configure(sim, view_state)
 	camera = GameCamera.new()
 	add_child(camera)
-	camera.configure(view_state)
+	camera.configure(view_state, sim)
 	camera.enabled = true
 	camera.make_current()
 	hud = Hud.new()
@@ -35,8 +36,11 @@ func _ready() -> void:
 	hud.pause_toggled.connect(_on_pause_toggled)
 	hud.save_requested.connect(_on_save)
 	hud.load_requested.connect(_on_load)
+	chronicle_hud = ChronicleHud.new()
+	add_child(chronicle_hud)
+	chronicle_hud.configure(sim, view_state)
 	_update_day_night()
-	hud.show_status("G1a läuft. 1 Tag = 15 reale Minuten bei 1x.", 6.0)
+	hud.show_status("G1b läuft. F: Follow · T: Familie · C: Chronik", 6.0)
 
 
 func _process(delta: float) -> void:
@@ -50,6 +54,7 @@ func _process(delta: float) -> void:
 	world_view.queue_redraw()
 	_update_day_night()
 	hud.refresh(sim)
+	chronicle_hud.refresh(sim)
 
 
 func _update_day_night() -> void:
@@ -106,8 +111,11 @@ func _select_at(world_pixel_pos: Vector2) -> void:
 			best_row = row
 	if best_row < 0:
 		view_state.selected_agent_id = 0
+		view_state.follow_agent_id = 0
 		return
 	view_state.selected_agent_id = sim.store.ids[best_row]
+	if view_state.follow_enabled:
+		view_state.follow_agent_id = view_state.selected_agent_id
 	camera.focus_on_tile(sim.current_position(best_row))
 
 
@@ -140,6 +148,11 @@ func _on_load() -> void:
 	sim = loaded["sim"]
 	_sim_accumulator = 0.0
 	world_view.configure(sim, view_state)
+	camera.sim = sim
 	if view_state.selected_agent_id > 0 and sim.store.row_for_id(view_state.selected_agent_id) < 0:
 		view_state.selected_agent_id = 0
+	if not FollowModel.has_target(sim, view_state.follow_agent_id):
+		view_state.follow_enabled = false
+		view_state.follow_agent_id = 0
+	chronicle_hud.configure(sim, view_state)
 	hud.show_status("Geladen: %s" % sim.clock.time_string(), 4.0)
