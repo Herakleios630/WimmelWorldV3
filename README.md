@@ -30,6 +30,7 @@ G0.5, G1, G2, B-Spike, G3 und G4a sind abgeschlossen.
 | `docs/g3/v3-g3-report.md` | G3: Tests, 120-Tage-Determinismus, Performance, Review |
 | `docs/g4/v3-g4-spec.md` | G4a/G4b: 10k-Kern und Systeme |
 | `docs/g4/v3-g4a-report.md` | G4a: 10k-Kern, Tests, Performance, Review |
+| `docs/g4/v3-g4b-spec.md` | G4b: Haushalte, Markt, Karawanen, Steuern, Diplomatie |
 | `docs/v3-risk-register.md` | Risiken R1–R18, Auslöser, Gegenmaßnahmen |
 | `docs/v3-g0.5-spike.md` | Technikspike vor G1 (abgeschlossen) |
 | `docs/g0.5/v3-g0.5-results.md` | G0.5-Messwerte, C#-Vergleich, Portentscheid |
