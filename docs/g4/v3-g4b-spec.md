@@ -88,7 +88,21 @@ G4b bleibt bei **10.000 Agenten**. Die 3 Nationen/100k sind G5.
 - Replay = Re-Simulation aus Seed + Config + Snapshot.
 - Save-Budgets: ≤ 40 MB, Save ≤ 3 s, Load ≤ 12 s (provisorisch).
 
-## 9. Tests
+## 9. Gate-Scope-Test-Update (D-68)
+
+Die historischen Gate-Suiten dürfen die Existenz späterer Gates nicht
+verbieten. Für G4b werden **nur** die überholten Abwesenheits-/Token-Prüfungen
+für `src/economy|politics|trade|caravan` und G4b-Fachbegriffe in den
+Scope-Assertions von G1b, G2, G3 und G4a entfernt oder auf das jeweilige
+Profil eingegrenzt.
+
+**Unverändert bleiben:** alle Verhaltensprüfungen T01–T09 der Alt-Gates,
+D-57-Stub-Prüfungen, Schema-/Determinismus-/Performance-Checks, G4a-Schema 7
+im G4a-Profil. G4b bekommt eigene Scope-Tests (kein Krieg, keine
+D-57-Simulation, keine G5-Features, Schema 8). Jede geänderte Scope-Zeile
+wird im G4b-Report dokumentiert.
+
+## 9.1 Tests
 
 - T-G4b-01 Haushaltsbudgets/Löhne/Steuern.
 - T-G4b-02 Marktpreise/Angebot/Nachfrage.

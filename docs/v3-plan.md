@@ -1171,6 +1171,17 @@ Welt, sichtbar markiert, nicht replay-äquivalent zu A. Kein Kamera-LOD.
 p95 3,25 ms); 5.000 als Qualitätsmodus (p95 6,95 ms); 150x primär, 200x
 Stretch. Finales B, Render/UI und Save-Format bleiben offen.
 
+#### D-68 — Gate-Scope-Tests werden mit neuen Gates fortgeschrieben
+
+**Entschieden:** Historische Scope-Tests dürfen die **Existenz späterer
+Gates** nicht verbieten. Für G4b werden in den Scope-Assertions von G1b, G2,
+G3 und G4a nur die überholten Abwesenheits-/Token-Prüfungen für
+`src/economy|politics|trade|caravan` und G4b-Fachbegriffe entfernt oder auf
+das jeweilige Profil eingegrenzt. **Alle Verhaltensprüfungen, D-57-Stub-
+Prüfungen, Schema-/Determinismus-/Performance-Checks und die G1–G4a-Tests
+T01–T09 bleiben unverändert.** G4b erhält eigene Scope-Tests (kein Krieg,
+keine D-57-Simulation, keine G5-Features, Schema 8).
+
 ## 5. Vorläufige Nicht-Ziele für den V3-Kickoff
 
 - Keine Wirtschaftssimulation, keine Fraktionen, kein Krieg, keine Untoten in
@@ -1268,3 +1279,4 @@ entschieden, aber kalibrierbar; `offen` = nicht entschieden.
 | D-65 | 120-Tage-Jahr/Seasons/Felder | final | 2026-11-14 | 120 Tage, 4×30 Seasons, saisonale Felder, G1/G2 historisch 30 Tage |
 | D-66 | A/B-Produktschnitt | final | 2026-11-14 | Cursed Beyond 1x/A, WimmelWorld standalone 150x/B, getrennte Welten |
 | D-67 | B-Detailtier | final | 2026-11-14 | 1k Detail Default, 5k Qualität; 150x primär, 200x Stretch |
+| D-68 | Gate-Scope-Tests fortschreiben | final | 2026-11-14 | Nur überholte Abwesenheits-/Token-Checks; Verhaltensprüfungen unverändert |
