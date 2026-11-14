@@ -438,7 +438,7 @@ sichtbare Demo und Review. „PARTIAL“ ist kein Abschluss.
 | **G1a** | 10-Akteure-Kern | Weiler, 10 Agenten, Hunger/Energie/Sozial, Wohnen, Arbeit, Tag/Nacht, Inspector, Event-Log, Save/Load | Sichtbarer Tag; Determinismus; Save/Load |
 | **G1b** | Soziales/Lebenszyklus/Chronik | Hygiene/Spaß/Gesundheit, Partnerschaft, Geburt, Tod, Familienbaum, Follow, Alerts, Story of the Day | Sichtbares Jahr bei 50x; Chronik; Determinismus |
 | **G2** | 100-Akteure-Slice | Bauerschaft, Haushalte, Jobs, Felder, lokale Wege, Event-Batching; D-57 nur Stubs | 100@50x 60 FPS; 3 Läufe; Save/Load |
-| **G3** | 1.000-Akteure-Slice | Kirchdorf/Kleinstadt, mehrere Arbeitsplätze, Pfadfindung, Eventbudget; Wetter/Feste/Kultur leicht | 1k@50x 60 FPS; Pfad-Checkpoint; 3 Läufe |
+| **G3** | 1.000-Akteure-Slice | Kirchdorf/Kleinstadt, mehrere Arbeitsplätze, Pfadfindung, Eventbudget; **D-57 nur Stubs** | 1k@50x 60 FPS; Pfad-Checkpoint; 3 Läufe |
 | **G4a** | 10.000-Akteure-Kern | Stadt + Hinterland; Vollsimulation A | 10k@50x 60 FPS; 3 Läufe |
 | **G4b** | 10.000 + Wirtschaft/Politik | Haushalte, Märkte, Karawanen, Steuern, Diplomatie | Systembilanz + Performance |
 | **G5a** | 100.000 Skalierung | Land, ~90–120 Siedlungen, Graph, Reisen, Save/Load | 100k@10x Pflicht; 100k@50x Stretch; 3 Läufe |
