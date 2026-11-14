@@ -1,8 +1,8 @@
 # WimmelWorld V3 — Planung
 
-Status: G2 bestanden; B-Spike 100k@150x läuft (A=1x/B=150x)  
+Status: G3 läuft (1k, 120-Tage-Jahr, saisonale Felder); G0–G2/B-Spike bestanden  
 Stand: 2026-11-14  
-Arbeitsmodus: **Nur Analyse und Planung. Kein Code, keine Implementierung, keine Änderung an V1/V2.**
+Arbeitsmodus: **Umsetzung läuft; G3 in Arbeit. Keine V1/V2-Änderungen, keine stillen Fidelity-/Balanceänderungen.**
 
 > **Externes Review 2026-11-13:** `reviews/v3-review-2026-11-13.md`.
 > Die strukturellen Änderungen sind bestätigt: G0.5-Technikspike, G1a/G1b,
@@ -26,9 +26,10 @@ einem beschlossenen Gate.
   für Cursed Beyond; 10k ist ein Zwischenschritt, ~100k die Designperspektive.
 - Erste sichtbare Abnahme: **10 Akteure** mit Bedürfnissen, Arbeit, Wohnung,
   Nahrung, Tag/Nacht, Beziehungen und Lebenszyklus.
-- Zeitbasis: **30 Tage/Jahr**, **15 reale Minuten/Tag bei 1x**, 4 Jahreszeiten,
-  1 Sim-Minute als Entscheidungsquantum; typische Lebensspanne **~50 Jahre**
-  mit hoher Variation (viele sterben mit ~30, einzelne werden ~70).
+- Zeitbasis ab G3: **120 Tage/Jahr**, 4 Seasons à **30 Tage**,
+  **15 reale Minuten/Tag bei 1x**, 1 Sim-Minute als Entscheidungsquantum;
+  G1/G2 bleiben historische 30-Tage-Profile. Lebensspanne **~50 Jahre** mit
+  hoher Variation (viele sterben mit ~30, einzelne werden ~70).
 - Skalenleiter: **10 → 100 → 1.000 → 10.000 → 100.000** Individuen, mit
   Siedlungstypen als Meilensteinen.
 - Welt: **3 Nationen** (Untote und Orks zunächst außen vor), **kompakt ~100k**,
@@ -196,12 +197,15 @@ verändert.
 
 ### 3.4 Zeit- und Entscheidungsrichtung
 
-- Ein Sim-Jahr hat **30 Tage**; vier Jahreszeiten à etwa 7,5 Tage.
+- **Ab G3:** Ein Sim-Jahr hat **120 Tage**; vier Seasons à **30 Tage**
+  (Frühling/Sommer/Herbst/Winter). G1/G2 bleiben als historische Profile bei
+  30 Tagen.
 - Ein Sim-Tag dauert bei 1x **15 reale Minuten**.
-- Geschwindigkeiten **1x, 10x und 50x** sind die Richtung; 50x ist die obere
-  Messlatte, nicht die erste Ausbaustufe.
-- Ein Sim-Tag = 86.400 Sim-Sekunden. Bei 15 realen Minuten ist 1x bereits eine
-  Zeitraffung um Faktor 96; 10x = Faktor 960; 50x = Faktor 4.800.
+- **A (1x autoritativ):** 1x/10x/50x. **B (Zeitraffer):** 150x/200x.
+- Ein Sim-Tag = 86.400 Sim-Sekunden. 1x = Faktor 96; 10x = 960; 50x = 4.800;
+  150x = 14.400; 200x = 19.200.
+- Ein 120-Tage-Jahr = **30 h bei 1x**, 3 h bei 10x, 36 min bei 50x,
+  **12 min bei 150x**, 9 min bei 200x. Ein 50-Jahre-Leben = **10 h bei 150x**.
 - Entscheidungsquantum: **1 Sim-Minute**. Das ist die Auflösung für
   Termine/Ereignisse, kein Pflicht-Polling aller Akteure pro Minute.
 - Sims treffen **keine pausenlosen Entscheidungen**. Sie entscheiden
@@ -438,7 +442,7 @@ sichtbare Demo und Review. „PARTIAL“ ist kein Abschluss.
 | **G1a** | 10-Akteure-Kern | Weiler, 10 Agenten, Hunger/Energie/Sozial, Wohnen, Arbeit, Tag/Nacht, Inspector, Event-Log, Save/Load | Sichtbarer Tag; Determinismus; Save/Load |
 | **G1b** | Soziales/Lebenszyklus/Chronik | Hygiene/Spaß/Gesundheit, Partnerschaft, Geburt, Tod, Familienbaum, Follow, Alerts, Story of the Day | Sichtbares Jahr bei 50x; Chronik; Determinismus |
 | **G2** | 100-Akteure-Slice | Bauerschaft, Haushalte, Jobs, Felder, lokale Wege, Event-Batching; D-57 nur Stubs | 100@50x 60 FPS; 3 Läufe; Save/Load |
-| **G3** | 1.000-Akteure-Slice | Kirchdorf/Kleinstadt, mehrere Arbeitsplätze, Pfadfindung, Eventbudget; **D-57 nur Stubs** | 1k@50x 60 FPS; Pfad-Checkpoint; 3 Läufe |
+| **G3** | 1.000-Akteure-Slice | Kleinstadt, 120-Tage-Jahr/30-Tage-Seasons, saisonale Felder, A*/Chunks/Save-Stress; **D-57 nur Stubs** | 1k@50x 60 FPS; 120-Tage-Determinismus; 3 Läufe; `g3`-Tag |
 | **G4a** | 10.000-Akteure-Kern | Stadt + Hinterland; Vollsimulation A | 10k@50x 60 FPS; 3 Läufe |
 | **G4b** | 10.000 + Wirtschaft/Politik | Haushalte, Märkte, Karawanen, Steuern, Diplomatie | Systembilanz + Performance |
 | **G5a** | 100.000 Skalierung | Land, ~90–120 Siedlungen, Graph, Reisen, Save/Load | 100k@10x Pflicht; 100k@50x Stretch; 3 Läufe |
@@ -791,16 +795,19 @@ Verhalten. Skalierung folgt stufenweise; 10k ist kein Endziel.
 
 #### D-05 — Speed-/Fidelity-Richtung
 
-**Entschieden:** 30-Tage-Jahr, 15 reale Minuten/Tag bei 1x, 1x/10x/50x,
-need-basierte Entscheidungen, nicht tick-gebunden.
+**Entschieden:** 15 reale Minuten/Tag bei 1x; **A: 1x/10x/50x**,
+**B: 150x/200x**; need-basierte Entscheidungen, nicht tick-gebunden. Der
+Kalender wird durch D-65 auf 120 Tage/Jahr erweitert; G1/G2 bleiben
+historische 30-Tage-Profile.
 
 ### 4.2 Runde 2 — entschieden
 
 #### D-06 — Kalender-, Tages- und Lebenszeitmodell
 
-**Entschieden:** 30 Tage/Jahr, 4 Jahreszeiten, 15 reale Minuten/Tag bei 1x,
-Entscheidungsquantum 1 Sim-Minute. Lebensspanne ~50 Jahre mit hoher Variation;
-viele sterben mit ~30, einzelne werden ~70. Keine feste Lebensdauer pro Agent.
+**Entschieden:** Ab G3 **120 Tage/Jahr**, 4 Seasons à **30 Tage**, 15 reale
+Minuten/Tag bei 1x, Entscheidungsquantum 1 Sim-Minute. G1/G2 bleiben
+historische 30-Tage-Profile. Lebensspanne ~50 Jahre mit hoher Variation; viele
+sterben mit ~30, einzelne werden ~70. Keine feste Lebensdauer pro Agent.
 
 #### D-07 — Skalenleiter und 100k-Härte
 
@@ -1131,13 +1138,37 @@ Gesetze/Wachen/Gerichte), Bildung/Gilden (Lehrlinge/Skills/Gilden),
 Feste/Kunst/Musik (Saisonfeste/Hochzeiten/Begräbnisse/Markttage). Keine
 Tiefensimulation; Verschiebung pro Gate erlaubt.
 
-### 4.12 G0-Freigabe — offen
+### 4.12 Status 2026-11-14
 
-Die Grundsatzentscheidungen sind vollständig. Offen ist die G0-Artefaktphase
-(G1-Spec, Architektur, Datenmodell, Benchmark, Chronik-Design, Fidelity-Vertrag,
-Risiko-Register, V3-Skelett) und danach der **G0.5-Technikspike**. Vor der
-G0-Freigabe wird kein Code geschrieben; G0.5 ist der erste, eng begrenzte
-Technikspike und keine Gameplay-Implementierung.
+- **G0, G0.5, G1, G1a.1, G1b 1–3, G2 und B-Spike abgeschlossen.**
+- **G3 läuft:** 1.000-Agenten-Kleinstadt, 120-Tage-Jahr, saisonale Felder,
+  A*/Chunk/Save-Stress, D-57 Stubs.
+- **A/B:** getrennte Welten; Cursed Beyond 1x/A, WimmelWorld standalone
+  150x/B. B-Spike bestätigt 100k@150x auf Simulationsebene.
+- **Git:** `b-spike` getaggt; `g3` folgt nach G3-Abnahme, danach `g4a`/`g4b`.
+
+### 4.13 Nachtrag 2026-11-14 — Kalender und Felder
+
+#### D-65 — 120-Tage-Jahr und saisonale Felder
+
+**Entschieden:** Ab G3 **120 Tage/Jahr**, 4 Seasons à **30 Tage**;
+G1/G2 bleiben historische 30-Tage-Profile. Ein Feld hat **eine Ernte pro Jahr**
+(Frühling pflügen/säen, Sommer wachsen, Herbst ernten, Winter Brache).
+40 Felder für 1.000 Agenten, 4 für 100; Bruttoertrag 10.000, Saatgut 1.000,
+Netto 9.000/Feld; 90.000 Startgrain, 720.000 Kornspeicher. Werte sind
+G3-Kalibrierung, keine finale Wirtschaft.
+
+#### D-66 — A/B-Produktschnitt
+
+**Entschieden:** Cursed Beyond läuft **1x/A autoritativ**, deterministisch,
+Save/Replay. WimmelWorld standalone nutzt **150x/B Zeitraffer** als getrennte
+Welt, sichtbar markiert, nicht replay-äquivalent zu A. Kein Kamera-LOD.
+
+#### D-67 — B-Detailtier
+
+**Entschieden:** 1.000 Detailagenten als Default für 100k@150x (B-Spike:
+p95 3,25 ms); 5.000 als Qualitätsmodus (p95 6,95 ms); 150x primär, 200x
+Stretch. Finales B, Render/UI und Save-Format bleiben offen.
 
 ## 5. Vorläufige Nicht-Ziele für den V3-Kickoff
 
@@ -1233,3 +1264,6 @@ entschieden, aber kalibrierbar; `offen` = nicht entschieden.
 | D-62 | Budgetmatrix | final | 2026-11-13 | Pro Szenario/Event-Typ; in G0.5/G2 kalibrieren |
 | D-63 | B-Fidelity-Vertrag | final | 2026-11-13 | Preserved fields/Approximationen jetzt definiert |
 | D-64 | G0.5-Ergebnis/Portentscheid | final | 2026-11-13 | GDScript beibehalten; kein Port vor G4a; Trigger + GDExtension |
+| D-65 | 120-Tage-Jahr/Seasons/Felder | final | 2026-11-14 | 120 Tage, 4×30 Seasons, saisonale Felder, G1/G2 historisch 30 Tage |
+| D-66 | A/B-Produktschnitt | final | 2026-11-14 | Cursed Beyond 1x/A, WimmelWorld standalone 150x/B, getrennte Welten |
+| D-67 | B-Detailtier | final | 2026-11-14 | 1k Detail Default, 5k Qualität; 150x primär, 200x Stretch |
