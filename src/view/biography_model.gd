@@ -9,11 +9,7 @@ static func for_agent(sim: Simulation, agent_id: int) -> PackedStringArray:
 	var out: PackedStringArray = PackedStringArray()
 	if agent_id <= 0:
 		return out
-	var events: Array = []
-	for event in sim.chronicle.all_events():
-		var ce: ChronicleEvent = event
-		if ce.actor_ids.has(agent_id) or ce.related_ids.has(agent_id):
-			events.append(ce)
+	var events: Array = sim.chronicle.events_for_agent(agent_id)
 	events.sort_custom(func(a, b):
 		if a.time != b.time:
 			return a.time < b.time

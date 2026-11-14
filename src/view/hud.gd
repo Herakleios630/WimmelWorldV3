@@ -216,13 +216,14 @@ func refresh(sim: Simulation) -> void:
 		b.modulate = Color(1.0, 0.9, 0.55) if (speed == view_state.speed and not view_state.paused) else Color.WHITE
 	if sim == null:
 		return
-	_stub_label.visible = sim.config.profile == SimConfig.PROFILE_G2
+	_stub_label.visible = sim.config.profile == SimConfig.PROFILE_G2 \
+		or sim.config.profile == SimConfig.PROFILE_G3
 	var now_ms: int = Time.get_ticks_msec()
 	if now_ms - _last_refresh_ms < 100:
 		return
 	_last_refresh_ms = now_ms
 	_time_label.text = "%s · %s   %dx" % [sim.clock.time_string(),
-		_season_name(sim.clock.day_index()), view_state.speed]
+		sim.config.season_name_for_day(sim.clock.day_index()), view_state.speed]
 	var field_ids: PackedInt32Array = sim.world.field_ids()
 	var field: Building = sim.world.building_by_id(field_ids[0]) if field_ids.size() > 0 else null
 	var stage_text: String = "?"
@@ -230,8 +231,9 @@ func refresh(sim: Simulation) -> void:
 		stage_text = Building.field_stage_name(field.field_stage)
 		if field_ids.size() > 1:
 			stage_text += " (%d Felder)" % field_ids.size()
-	_grain_label.text = "Grain: %d (+%d geerntet) · Feld: %s · Jahr %d" % [
-		sim.grain, sim.grain_harvested, stage_text, sim.year_index + 1]
+	_grain_label.text = "Grain: %d/%d (+%d geerntet, -%d Saatgut) · Feld: %s · Jahr %d" % [
+		sim.grain, sim.config.granary_capacity, sim.grain_harvested,
+		sim.grain_seed_used, stage_text, sim.year_index + 1]
 	if view_state.selected_agent_id > 0:
 		var info: Dictionary = InspectorModel.for_agent(sim, view_state.selected_agent_id)
 		if info.is_empty():
@@ -300,6 +302,8 @@ func _need_value_from_info(info: Dictionary, need: int) -> float:
 
 
 func _season_name(day: int) -> String:
+	# Historischer Helfer für Aufrufer ohne SimConfig; G3 nutzt direkt
+	# sim.config.season_name_for_day().
 	var season: int = (day % SimConfig.YEAR_DAYS) * SimConfig.SEASONS / SimConfig.YEAR_DAYS
 	return ["Frühling", "Sommer", "Herbst", "Winter"][season]
 

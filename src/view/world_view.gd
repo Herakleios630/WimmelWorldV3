@@ -93,14 +93,22 @@ func _tile_rect(rect: Rect2i) -> Rect2:
 		rect.size.x * TILE_PX, rect.size.y * TILE_PX)
 
 
+func _far_detail() -> bool:
+	return sim != null and sim.config.is_g3() and view_state != null \
+		and view_state.zoom < 0.85
+
+
 func _draw_field_details() -> void:
 	var visible: Rect2 = _visible_tiles()
+	var far_detail: bool = _far_detail()
 	for field_id in sim.world.field_ids():
 		var field: Building = sim.world.building_by_id(field_id)
 		if field == null or not visible.intersects(field.rect):
 			continue
 		var r: Rect2 = _tile_rect(field.rect)
 		draw_rect(r, Color(0.30, 0.36, 0.14), false, 2.0)
+		if far_detail:
+			continue
 		for i in range(1, field.rect.size.y, 3):
 			var y: float = r.position.y + i * TILE_PX
 			draw_line(Vector2(r.position.x + 2, y), Vector2(r.end.x - 2, y),
@@ -124,6 +132,7 @@ func _visible_tiles() -> Rect2:
 
 func _draw_buildings() -> void:
 	var visible: Rect2 = _visible_tiles()
+	var far_detail: bool = _far_detail()
 	for building in sim.world.buildings:
 		var b: Building = building
 		if not visible.intersects(b.rect):
@@ -134,6 +143,10 @@ func _draw_buildings() -> void:
 				continue
 			Building.KIND_HOUSE:
 				draw_rect(Rect2(r.position + Vector2(3, 4), r.size), Color(0, 0, 0, 0.25))
+				if far_detail:
+					draw_rect(r, Color(0.62, 0.48, 0.34))
+					draw_rect(r, Color(0.28, 0.20, 0.14), false, 2.0)
+					continue
 				draw_rect(r, Color(0.62, 0.48, 0.34))
 				draw_rect(r, Color(0.28, 0.20, 0.14), false, 2.0)
 				var roof_h: float = r.size.y * 0.42
@@ -182,10 +195,14 @@ func _draw_buildings() -> void:
 
 func _draw_trees() -> void:
 	var visible: Rect2 = _visible_tiles()
+	var far_detail: bool = _far_detail()
 	for p in sim.world.decor_trees:
 		if not visible.has_point(p):
 			continue
 		var px: Vector2 = p * TILE_PX
+		if far_detail:
+			draw_circle(px + Vector2(0, -5), 6.0, Color(0.24, 0.43, 0.21))
+			continue
 		draw_rect(Rect2(px + Vector2(-2, -2), Vector2(4, 8)), Color(0.35, 0.24, 0.14))
 		draw_circle(px + Vector2(0, -6), 8.0, Color(0.22, 0.42, 0.20))
 		draw_circle(px + Vector2(3, -9), 4.5, Color(0.26, 0.48, 0.24))
@@ -204,6 +221,12 @@ static func field_label(rec: AgentRecord, agent_id: int, selected: bool = false)
 
 func _draw_agents() -> void:
 	var visible: Rect2 = _visible_tiles()
+	# Render-LOD ist rein darstellend und nie Simulationszustand. Bei 1k und
+	# weitem Zoom zeichnen wir Marker; Labels nur nah/selektiert/gefolgt.
+	var g3: bool = sim.config.is_g3()
+	var zoom: float = view_state.zoom if view_state != null else 1.0
+	var far_markers: bool = g3 and zoom < 1.05
+	var show_labels: bool = (not g3) or zoom >= 1.25
 	for row in sim.store.count:
 		if sim.store.alive[row] == 0:
 			continue
@@ -212,6 +235,13 @@ func _draw_agents() -> void:
 			continue
 		var pos: Vector2 = tile_pos * TILE_PX
 		var color: Color = AGENT_COLORS[row % AGENT_COLORS.size()]
+		var selected_row: bool = view_state != null \
+			and view_state.selected_agent_id == sim.store.ids[row]
+		var followed: bool = view_state != null and view_state.follow_enabled \
+			and view_state.follow_agent_id == sim.store.ids[row]
+		if far_markers and not selected_row and not followed:
+			draw_circle(pos + Vector2(0, -4), 3.0, color)
+			continue
 		var act: int = sim.store.activity[row]
 		# Schatten
 		draw_set_transform(pos + Vector2(0, 5), 0.0, Vector2(1.0, 0.45))
@@ -231,25 +261,26 @@ func _draw_agents() -> void:
 			AgentStore.ACT_SOCIAL: marker = "So"
 			AgentStore.ACT_LEARN: marker = "Le"
 			AgentStore.ACT_PLAY: marker = "Sp"
-		if marker != "":
+		if marker != "" and not (g3 and far_markers and not selected_row):
 			draw_string(_font, pos + Vector2(7, -5), marker,
 				HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1, 1, 1, 0.78))
-		var rec: AgentRecord = AgentRecords.record_by_id(sim.records, sim.store.ids[row])
-		var selected: bool = view_state != null \
-			and view_state.selected_agent_id == sim.store.ids[row]
-		var label: String = field_label(rec, sim.store.ids[row], selected)
-		var label_size: int = 11 if selected else 10
-		var label_color: Color = Color(1.0, 0.95, 0.7) if selected else Color(1, 1, 1, 0.92)
-		var label_width: float = _font.get_string_size(label,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x
-		# Nachbarn im selben Haus/Werkstatt-Cluster liegen teils nur 1,2-1,4
-		# Tiles auseinander; gestaffelte Label-Höhen halten die kurzen Labels
-		# lesbar (maximal drei Stufen pro Cluster).
-		var label_y: float = -22.0 - float(row % 3) * 11.0
-		var label_pos: Vector2 = pos + Vector2(-label_width * 0.5, label_y)
-		draw_string(_font, label_pos + Vector2(1, 1), label,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, label_size, Color(0.05, 0.04, 0.03, 0.65))
-		draw_string(_font, label_pos, label,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, label_size, label_color)
+		var selected: bool = selected_row
+		if show_labels or selected:
+			var rec: AgentRecord = AgentRecords.record_by_id(sim.records,
+				sim.store.ids[row])
+			var label: String = field_label(rec, sim.store.ids[row], selected)
+			var label_size: int = 11 if selected else 10
+			var label_color: Color = Color(1.0, 0.95, 0.7) if selected else Color(1, 1, 1, 0.92)
+			var label_width: float = _font.get_string_size(label,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, label_size).x
+			# Nachbarn im selben Haus/Werkstatt-Cluster liegen teils nur 1,2-1,4
+			# Tiles auseinander; gestaffelte Label-Höhen halten die kurzen Labels
+			# lesbar (maximal drei Stufen pro Cluster).
+			var label_y: float = -22.0 - float(row % 3) * 11.0
+			var label_pos: Vector2 = pos + Vector2(-label_width * 0.5, label_y)
+			draw_string(_font, label_pos + Vector2(1, 1), label,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, label_size, Color(0.05, 0.04, 0.03, 0.65))
+			draw_string(_font, label_pos, label,
+				HORIZONTAL_ALIGNMENT_LEFT, -1, label_size, label_color)
 		if selected:
 			draw_arc(pos, 15.0, 0.0, TAU, 24, Color(1.0, 0.92, 0.35), 2.0)

@@ -17,8 +17,15 @@ static func query(sim: Simulation, filters: Dictionary = {},
 	var household_id: int = int(filters.get("household_id", 0))
 	var settlement_id: int = int(filters.get("settlement_id", 0))
 	var category: String = str(filters.get("category", ""))
+	var cache_key: String = "%s|%d" % [str(filters), limit]
+	var cached: Array = store.cached_panel_query(cache_key)
+	if not cached.is_empty():
+		return cached
 	var out: Array = []
-	for event in store.all_events():
+	var source: Array = store.all_events()
+	if agent_id > 0:
+		source = store.events_for_agent(agent_id)
+	for event in source:
 		var ce: ChronicleEvent = event
 		if ce.importance < importance_min:
 			continue
@@ -39,6 +46,7 @@ static func query(sim: Simulation, filters: Dictionary = {},
 	out.sort_custom(func(a, b): return _entry_less(a, b))
 	if out.size() > limit:
 		out.resize(limit)
+	store.cache_panel_query(cache_key, out)
 	return out
 
 

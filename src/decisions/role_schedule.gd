@@ -15,7 +15,17 @@ const PLACE_JOB: int = 4
 const STRIDE: int = 4
 
 
-static func plan_for_role(p_role: int) -> Array:
+static func plan_for_role(p_role: int, g3: bool = false) -> Array:
+	if g3:
+		match p_role:
+			AgentStore.ROLE_CHILD:
+				return _g3_child_plan()
+			AgentStore.ROLE_YOUTH:
+				return _g3_youth_plan()
+			AgentStore.ROLE_OLD:
+				return _g3_old_plan()
+			_:
+				return _g3_adult_plan()
 	match p_role:
 		AgentStore.ROLE_CHILD:
 			return _child_plan()
@@ -25,6 +35,72 @@ static func plan_for_role(p_role: int) -> Array:
 			return _old_plan()
 		_:
 			return _adult_plan()
+
+
+## G3-Pläne: 1-Stunden-Mahlzeitenfenster und breitere Arbeits-/Sozialfenster.
+## Das erlaubt deterministischen Routinejitter, ohne Mahlzeiten zu verpassen.
+static func _g3_adult_plan() -> Array:
+	return [
+		PackedInt32Array([0, 360, AgentStore.ACT_SLEEP, PLACE_HOME]),
+		PackedInt32Array([360, 420, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([420, 510, AgentStore.ACT_EAT, PLACE_HOME]),
+		PackedInt32Array([510, 720, AgentStore.ACT_WORK, PLACE_JOB]),
+		PackedInt32Array([720, 810, AgentStore.ACT_EAT, PLACE_HOME]),
+		PackedInt32Array([810, 1020, AgentStore.ACT_WORK, PLACE_JOB]),
+		PackedInt32Array([1020, 1080, AgentStore.ACT_SOCIAL, PLACE_PLAZA]),
+		PackedInt32Array([1080, 1200, AgentStore.ACT_EAT, PLACE_HOME]),
+		PackedInt32Array([1200, 1260, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([1260, 1440, AgentStore.ACT_SLEEP, PLACE_HOME]),
+	]
+
+
+static func _g3_child_plan() -> Array:
+	return [
+		PackedInt32Array([0, 390, AgentStore.ACT_SLEEP, PLACE_HOME]),
+		PackedInt32Array([390, 420, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([420, 510, AgentStore.ACT_EAT, PLACE_HOME]),
+		PackedInt32Array([510, 720, AgentStore.ACT_LEARN, PLACE_HOME]),
+		PackedInt32Array([720, 810, AgentStore.ACT_EAT, PLACE_HOME]),
+		PackedInt32Array([810, 840, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([840, 1020, AgentStore.ACT_PLAY, PLACE_PLAZA]),
+		PackedInt32Array([1020, 1080, AgentStore.ACT_SOCIAL, PLACE_PLAZA]),
+		PackedInt32Array([1080, 1200, AgentStore.ACT_EAT, PLACE_HOME]),
+		PackedInt32Array([1200, 1230, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([1230, 1440, AgentStore.ACT_SLEEP, PLACE_HOME]),
+	]
+
+
+static func _g3_youth_plan() -> Array:
+	return [
+		PackedInt32Array([0, 390, AgentStore.ACT_SLEEP, PLACE_HOME]),
+		PackedInt32Array([390, 420, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([420, 510, AgentStore.ACT_EAT, PLACE_HOME]),
+		PackedInt32Array([510, 720, AgentStore.ACT_WORK, PLACE_JOB]),
+		PackedInt32Array([720, 810, AgentStore.ACT_EAT, PLACE_HOME]),
+		PackedInt32Array([810, 1020, AgentStore.ACT_LEARN, PLACE_WORKSHOP]),
+		PackedInt32Array([1020, 1080, AgentStore.ACT_SOCIAL, PLACE_PLAZA]),
+		PackedInt32Array([1080, 1200, AgentStore.ACT_EAT, PLACE_HOME]),
+		PackedInt32Array([1200, 1260, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([1260, 1440, AgentStore.ACT_SLEEP, PLACE_HOME]),
+	]
+
+
+static func _g3_old_plan() -> Array:
+	return [
+		PackedInt32Array([0, 390, AgentStore.ACT_SLEEP, PLACE_HOME]),
+		PackedInt32Array([390, 420, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([420, 510, AgentStore.ACT_EAT, PLACE_HOME]),
+		PackedInt32Array([510, 570, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([570, 690, AgentStore.ACT_WORK, PLACE_JOB]),
+		PackedInt32Array([690, 720, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([720, 810, AgentStore.ACT_EAT, PLACE_HOME]),
+		PackedInt32Array([810, 900, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([900, 1020, AgentStore.ACT_SOCIAL, PLACE_PLAZA]),
+		PackedInt32Array([1020, 1080, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([1080, 1200, AgentStore.ACT_EAT, PLACE_HOME]),
+		PackedInt32Array([1200, 1230, AgentStore.ACT_IDLE, PLACE_HOME]),
+		PackedInt32Array([1230, 1440, AgentStore.ACT_SLEEP, PLACE_HOME]),
+	]
 
 
 static func _adult_plan() -> Array:
@@ -96,8 +172,9 @@ static func _old_plan() -> Array:
 
 
 ## Eintrag, der die Minute enthält. Pläne sind lückenlos.
-static func entry_at(p_role: int, minute_of_day: int) -> PackedInt32Array:
-	var plan: Array = plan_for_role(p_role)
+static func entry_at(p_role: int, minute_of_day: int,
+		g3: bool = false) -> PackedInt32Array:
+	var plan: Array = plan_for_role(p_role, g3)
 	for entry in plan:
 		var e: PackedInt32Array = entry
 		if minute_of_day >= e[0] and minute_of_day < e[1]:
@@ -106,19 +183,18 @@ static func entry_at(p_role: int, minute_of_day: int) -> PackedInt32Array:
 
 
 ## Absoluter Endzeitpunkt des aktuellen Eintrags.
-static func entry_end_abs(now: int, p_role: int) -> int:
+static func entry_end_abs(now: int, p_role: int, g3: bool = false) -> int:
 	var day_start: int = now - (now % SimConfig.TICKS_PER_DAY)
 	var minute_of_day: int = (now % SimConfig.TICKS_PER_DAY) / 60
-	var entry: PackedInt32Array = entry_at(p_role, minute_of_day)
+	var entry: PackedInt32Array = entry_at(p_role, minute_of_day, g3)
 	return day_start + entry[1] * 60
 
 
 ## Nächster Planübergang strikt nach now.
-static func next_transition_abs(now: int, p_role: int) -> int:
+static func next_transition_abs(now: int, p_role: int, g3: bool = false) -> int:
 	var day_start: int = now - (now % SimConfig.TICKS_PER_DAY)
-	var second_of_day: int = now % SimConfig.TICKS_PER_DAY
 	var best: int = day_start + SimConfig.TICKS_PER_DAY
-	for entry in plan_for_role(p_role):
+	for entry in plan_for_role(p_role, g3):
 		var e: PackedInt32Array = entry
 		var start_abs: int = day_start + e[0] * 60
 		if start_abs > now and start_abs < best:
@@ -127,11 +203,12 @@ static func next_transition_abs(now: int, p_role: int) -> int:
 
 
 ## Sekunden bis zum nächsten Start einer Aktivität (nur heute/morgen).
-static func seconds_until_next_activity(now: int, p_role: int, act: int) -> int:
+static func seconds_until_next_activity(now: int, p_role: int, act: int,
+		g3: bool = false) -> int:
 	var day_start: int = now - (now % SimConfig.TICKS_PER_DAY)
 	for day_offset in [0, 1]:
 		var base: int = day_start + day_offset * SimConfig.TICKS_PER_DAY
-		for entry in plan_for_role(p_role):
+		for entry in plan_for_role(p_role, g3):
 			var e: PackedInt32Array = entry
 			if e[2] != act:
 				continue

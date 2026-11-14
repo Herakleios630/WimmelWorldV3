@@ -23,6 +23,16 @@ var latest: Dictionary = {}
 
 var next_id: int = 1
 var day_index: int = 0
+# Abgeleiteter Dedup-Index: dedup_key -> letztes ChronicleEvent. Ersetzt den
+# linearen Scan bei 1000 Agenten; wird aus events/historic/anchors neu gebaut.
+var _dedup_index: Dictionary = {}
+# Abgeleitete View-Caches (nicht im Save): Agent-Index und wiederholte
+# Panel-Filter. cache_version wird bei jeder Event-/Prune-Änderung erhöht.
+var cache_version: int = 1
+var _agent_index: Dictionary = {}
+var _agent_index_ready: bool = false
+var _panel_cache: Dictionary = {}
+var _panel_cache_version: int = -1
 var ingested_total: int = 0
 var routine_events: int = 0
 var deduped_total: int = 0
@@ -52,6 +62,56 @@ func apply_config(config: SimConfig) -> void:
 	max_historic = maxi(1, config.chronicle_historic_max)
 
 
+func _bump_cache_version() -> void:
+	cache_version += 1
+
+
+func ensure_agent_index() -> void:
+	if not _agent_index_ready:
+		_rebuild_agent_index()
+
+
+func _rebuild_agent_index() -> void:
+	_agent_index.clear()
+	for event in all_events():
+		_agent_add(event as ChronicleEvent)
+	_agent_index_ready = true
+
+
+func events_for_agent(agent_id: int) -> Array:
+	ensure_agent_index()
+	return _agent_index.get(agent_id, [])
+
+
+func _agent_add(ce: ChronicleEvent) -> void:
+	for actor in ce.actor_ids:
+		_agent_add_one(actor, ce)
+	for related in ce.related_ids:
+		_agent_add_one(related, ce)
+
+
+func _agent_add_one(agent_id: int, ce: ChronicleEvent) -> void:
+	if agent_id <= 0:
+		return
+	if not _agent_index.has(agent_id):
+		_agent_index[agent_id] = []
+	(_agent_index[agent_id] as Array).append(ce)
+
+
+func cached_panel_query(key: String) -> Array:
+	if _panel_cache_version != cache_version:
+		_panel_cache.clear()
+		_panel_cache_version = cache_version
+	return _panel_cache.get(key, [])
+
+
+func cache_panel_query(key: String, entries: Array) -> void:
+	if _panel_cache_version != cache_version:
+		_panel_cache.clear()
+		_panel_cache_version = cache_version
+	_panel_cache[key] = entries
+
+
 func ingest(event: SimEvent, sim: Simulation) -> void:
 	ingested_total += 1
 	var meta: Dictionary = ChronicleCurator.classify(event)
@@ -59,40 +119,57 @@ func ingest(event: SimEvent, sim: Simulation) -> void:
 	if importance == SimEvent.IMPORTANCE_ROUTINE:
 		routine_events += 1
 		aggregated_total += 1
-		_routine_add(event, meta)
+		_routine_add(event, meta, sim)
 		return
 	var key: String = ChronicleCurator.dedup_key(event, meta)
 	if key != "":
-		var existing: ChronicleEvent = _find_dedup(key, event.time)
-		if existing != null:
+		var existing: ChronicleEvent = _dedup_index.get(key, null)
+		if existing != null and event.time - existing.last_time <= SimConfig.TICKS_PER_DAY:
 			existing.add_source(event.id, event.time)
+			var old_related: int = existing.related_ids.size()
 			existing.merge_related(ChronicleCurator.related_agent_ids(event))
+			if _agent_index_ready:
+				for i in range(old_related, existing.related_ids.size()):
+					_agent_add_one(existing.related_ids[i], existing)
 			deduped_total += 1
 			aggregated_total += 1
 			_update_latest(existing)
+			_bump_cache_version()
 			return
 	var ce: ChronicleEvent = _make_event(event, sim, meta, key)
 	if importance == SimEvent.IMPORTANCE_HISTORIC:
 		historic.append(ce)
 	else:
 		events.append(ce)
+	if key != "":
+		_dedup_index[key] = ce
+	if _agent_index_ready:
+		_agent_add(ce)
 	_update_latest(ce)
+	_bump_cache_version()
 
 
-func _routine_add(event: SimEvent, meta: Dictionary) -> void:
+func _routine_add(event: SimEvent, meta: Dictionary, sim: Simulation) -> void:
 	var day: int = event.time / SimConfig.TICKS_PER_DAY
+	# G3 aggregiert Routine an der Quelle pro Tag/Typ; G1/G2 behalten die
+	# historische Per-Agent-Aggregation für die Chronik-Texte.
 	var key: String = "%d:%d:%d" % [day, event.type, event.agent_id]
+	if sim != null and sim.config != null and sim.config.is_g3():
+		key = "%d:%d" % [day, event.type]
 	if routine.has(key):
 		var bucket: Dictionary = routine[key]
 		bucket["count"] = int(bucket["count"]) + 1
 		bucket["last"] = event.time
 	else:
+		var agent_value: int = event.agent_id
+		if sim != null and sim.config != null and sim.config.is_g3():
+			agent_value = 0
 		routine[key] = {
 			"count": 1,
 			"first": event.time,
 			"last": event.time,
 			"type": event.type,
-			"agent": event.agent_id,
+			"agent": agent_value,
 			"category": str(meta["category"]),
 		}
 
@@ -183,17 +260,20 @@ func _update_latest(ce: ChronicleEvent) -> void:
 			latest["year_summary"] = ce.id
 
 
-func _find_dedup(key: String, at_time: int) -> ChronicleEvent:
-	var window: int = SimConfig.TICKS_PER_DAY
-	for i in range(events.size() - 1, -1, -1):
-		var event: ChronicleEvent = events[i]
-		if event.dedup_key == key and at_time - event.last_time <= window:
-			return event
-	for i in range(historic.size() - 1, -1, -1):
-		var historic_event: ChronicleEvent = historic[i]
-		if historic_event.dedup_key == key and at_time - historic_event.last_time <= window:
-			return historic_event
-	return null
+func _rebuild_dedup_index() -> void:
+	_dedup_index.clear()
+	for event in events:
+		var ce: ChronicleEvent = event
+		if ce.dedup_key != "":
+			_dedup_index[ce.dedup_key] = ce
+	for event in historic:
+		var he: ChronicleEvent = event
+		if he.dedup_key != "":
+			_dedup_index[he.dedup_key] = he
+	for event in anchors:
+		var ae: ChronicleEvent = event
+		if ae.dedup_key != "":
+			_dedup_index[ae.dedup_key] = ae
 
 
 ## Wird vom Tages-Tick aufgerufen. Finalisiert alle noch offenen Tage bis
@@ -310,14 +390,17 @@ func _clear_routine_day(day: int) -> void:
 
 
 func _prune(sim: Simulation) -> void:
+	_bump_cache_version()
 	var cutoff_time: int = (day_index - max_recent_days) * SimConfig.TICKS_PER_DAY
 	var anchor_cutoff: int = (day_index - max_summary_days) * SimConfig.TICKS_PER_DAY
+	# Einmalige Kausalitätsmenge statt O(n²)-Scan pro verdrängtem Event.
+	var anchor_ids: Dictionary = _cause_anchor_ids()
 	var keep: Array = []
 	for event in events:
 		var ce: ChronicleEvent = event
 		if ce.last_time >= cutoff_time:
 			keep.append(ce)
-		elif _is_cause_anchor(ce.id) and ce.time >= anchor_cutoff:
+		elif anchor_ids.has(ce.id) and ce.time >= anchor_cutoff:
 			anchors.append(ce)
 			pruned_recent += 1
 		else:
@@ -325,7 +408,7 @@ func _prune(sim: Simulation) -> void:
 	events = keep
 	while events.size() > max_recent_events:
 		var retired: ChronicleEvent = events.pop_front()
-		if _is_cause_anchor(retired.id) and retired.time >= anchor_cutoff:
+		if anchor_ids.has(retired.id) and retired.time >= anchor_cutoff:
 			anchors.append(retired)
 		pruned_recent += 1
 	var kept_summaries: Array = []
@@ -354,20 +437,22 @@ func _prune(sim: Simulation) -> void:
 		pruned_anchors += 1
 
 
-func _is_cause_anchor(event_id: int) -> bool:
+func _cause_anchor_ids() -> Dictionary:
+	var ids: Dictionary = {}
 	for key in latest:
-		if int(latest[key]) == event_id:
-			return true
+		var event_id: int = int(latest[key])
+		if event_id > 0:
+			ids[event_id] = true
 	for event in events:
-		if (event as ChronicleEvent).causes.has(event_id):
-			return true
+		for cause in (event as ChronicleEvent).causes:
+			ids[cause] = true
 	for event in historic:
-		if (event as ChronicleEvent).causes.has(event_id):
-			return true
+		for cause in (event as ChronicleEvent).causes:
+			ids[cause] = true
 	for event in anchors:
-		if (event as ChronicleEvent).causes.has(event_id):
-			return true
-	return false
+		for cause in (event as ChronicleEvent).causes:
+			ids[cause] = true
+	return ids
 
 
 func events_for_day(day: int) -> Array:
@@ -554,6 +639,11 @@ func clear_all(day: int = -1) -> void:
 	anchors.clear()
 	routine.clear()
 	latest.clear()
+	_dedup_index.clear()
+	_agent_index.clear()
+	_agent_index_ready = false
+	_panel_cache.clear()
+	cache_version += 1
 	next_id = 1
 	ingested_total = 0
 	routine_events = 0
@@ -670,4 +760,7 @@ static func read_from(r: ByteReader, config: SimConfig) -> ChronicleStore:
 	for i in latest_count:
 		var latest_key: String = r.string_value()
 		store.latest[latest_key] = r.i64()
+	store._rebuild_dedup_index()
+	store._rebuild_agent_index()
+	store.cache_version += 1
 	return store

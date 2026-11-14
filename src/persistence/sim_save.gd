@@ -9,8 +9,12 @@ extends RefCounted
 ##         PAYLOAD_SIZE u64
 
 const MAGIC: int = 0x57473141
+# Historische Profile G1/G2 bleiben Schema 5. G3 nutzt Schema 6, damit der
+# 120-Tage-Kalender, die saisonalen Feldzustände und die 1k-Welt sichtbar
+# versioniert sind. Die Konstanten 5 bleiben für die unveränderten G1/G2-Tests.
 const SCHEMA_VERSION: int = 5
 const GAME_VERSION: int = 5
+const G3_SCHEMA_VERSION: int = SimConfig.G3_SCHEMA_VERSION
 const HEADER_SIZE: int = 28
 const MAX_ARRAY: int = 2000000
 
@@ -26,8 +30,8 @@ static func save_simulation(sim: Simulation, path: String) -> Dictionary:
 	var payload: PackedByteArray = payload_writer.buf
 	var writer: ByteWriter = ByteWriter.new()
 	writer.u32(MAGIC)
-	writer.u32(SCHEMA_VERSION)
-	writer.u32(GAME_VERSION)
+	writer.u32(sim.config.save_schema_version())
+	writer.u32(sim.config.game_version_for_save())
 	writer.u64(sim.config.config_hash())
 	writer.u64(payload.size())
 	writer.raw(payload)
@@ -39,7 +43,7 @@ static func save_simulation(sim: Simulation, path: String) -> Dictionary:
 	file.close()
 	var elapsed: float = float(Time.get_ticks_usec() - t0) / 1000.0
 	return {"ok": true, "path": path, "bytes": writer.size(),
-		"save_ms": elapsed, "schema": SCHEMA_VERSION,
+		"save_ms": elapsed, "schema": sim.config.save_schema_version(),
 		"config_hash": sim.config.config_hash(),
 		"replay_meta": Replay.replay_meta(sim),
 		"chronicle_budget": sim.chronicle.budget_info()}
@@ -66,7 +70,7 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 	if magic != MAGIC:
 		return {"ok": false, "error": "bad_magic", "magic": magic}
 	var schema: int = header.u32()
-	if schema != SCHEMA_VERSION:
+	if schema != SCHEMA_VERSION and schema != G3_SCHEMA_VERSION:
 		return {"ok": false, "error": "unsupported_schema", "schema": schema}
 	var game_version: int = header.u32()
 	if game_version < 1:
@@ -77,9 +81,11 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 		return {"ok": false, "error": "bad_payload_size", "payload_size": payload_size}
 	var payload: PackedByteArray = bytes.slice(HEADER_SIZE, HEADER_SIZE + payload_size)
 	var reader: ByteReader = ByteReader.new(payload)
-	var config: SimConfig = _read_config(reader)
+	var config: SimConfig = _read_config(reader, schema)
 	if not reader.ok:
 		return {"ok": false, "error": reader.error}
+	if schema != config.save_schema_version():
+		return {"ok": false, "error": "unsupported_schema", "schema": schema}
 	if config.config_hash() != config_hash:
 		return {"ok": false, "error": "config_hash_mismatch"}
 	var sim: Simulation = Simulation.new()
@@ -109,8 +115,12 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 	sim.partnerships_formed = reader.i64()
 	sim.households_dissolved = reader.i64()
 	sim.lifecycle_ticks = reader.i64()
+	sim.grain_seed_used = reader.i64()
+	sim.grain_overflow = reader.i64()
+	for i in 4:
+		sim.harvest_season_counts[i] = reader.i64()
 	var field_count: int = reader.u32()
-	if field_count < 0 or field_count > 16:
+	if field_count < 0 or field_count > 64:
 		return {"ok": false, "error": "bad_field_count"}
 	for _i in field_count:
 		var field_id: int = reader.i32()
@@ -124,6 +134,14 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 			field.field_work_s = field_work_s
 			field.field_growth_end = field_growth_end
 			field.field_growth_gen = field_growth_gen
+		if schema == G3_SCHEMA_VERSION:
+			var crop_year: int = reader.i32()
+			var harvested_year: int = reader.i32()
+			var shortage_day: int = reader.i32()
+			if field != null:
+				field.field_crop_year = crop_year
+				field.field_harvested_year = harvested_year
+				field.field_last_shortage_day = shortage_day
 	sim.year_index = reader.i64()
 	sim.year_start_grain = reader.i64()
 	sim.year_grain_produced = reader.i64()
@@ -237,6 +255,12 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 	w.i64(config.chronicle_historic_max)
 	w.i64(config.chronicle_story_max_per_day)
 	w.i64(config.chronicle_alert_max_per_day)
+	if config.save_schema_version() == G3_SCHEMA_VERSION:
+		w.i32(config.year_days)
+		w.i32(config.season_days)
+		w.i32(1 if config.seasonal_fields else 0)
+		w.i64(config.field_seed_cost)
+		w.i64(config.granary_capacity)
 
 	w.i64(sim.clock.now)
 	var sched: EventScheduler = sim.scheduler
@@ -267,8 +291,13 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 	w.i64(sim.partnerships_formed)
 	w.i64(sim.households_dissolved)
 	w.i64(sim.lifecycle_ticks)
+	w.i64(sim.grain_seed_used)
+	w.i64(sim.grain_overflow)
+	for i in 4:
+		w.i64(sim.harvest_season_counts[i])
 	var field_ids: PackedInt32Array = sim.world.field_ids()
 	w.u32(field_ids.size())
+	var g3_schema: bool = config.save_schema_version() == G3_SCHEMA_VERSION
 	for field_id in field_ids:
 		var field: Building = sim.world.building_by_id(field_id)
 		w.i32(field_id)
@@ -276,6 +305,10 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 		w.i64(field.field_work_s if field != null else 0)
 		w.i64(field.field_growth_end if field != null else 0)
 		w.i32(field.field_growth_gen if field != null else 0)
+		if g3_schema:
+			w.i32(field.field_crop_year if field != null else -1)
+			w.i32(field.field_harvested_year if field != null else -1)
+			w.i32(field.field_last_shortage_day if field != null else -1)
 	w.i64(sim.year_index)
 	w.i64(sim.year_start_grain)
 	w.i64(sim.year_grain_produced)
@@ -608,11 +641,19 @@ static func _read_routes(r: ByteReader) -> RouteStore:
 	return routes
 
 
-static func _read_config(r: ByteReader) -> SimConfig:
+static func _read_config(r: ByteReader, schema: int) -> SimConfig:
 	var config: SimConfig = SimConfig.new()
 	config.seed = r.i64()
 	config.start_time = r.i64()
 	config.profile = r.i32()
+	if schema == G3_SCHEMA_VERSION and config.profile != SimConfig.PROFILE_G3:
+		r.ok = false
+		r.error = "unsupported_schema"
+		return config
+	if schema == SCHEMA_VERSION and config.profile == SimConfig.PROFILE_G3:
+		r.ok = false
+		r.error = "unsupported_schema"
+		return config
 	config.world_size = r.i32()
 	config.target_agents = r.i32()
 	config.target_households = r.i32()
@@ -683,6 +724,12 @@ static func _read_config(r: ByteReader) -> SimConfig:
 	config.chronicle_historic_max = r.i64()
 	config.chronicle_story_max_per_day = r.i64()
 	config.chronicle_alert_max_per_day = r.i64()
+	if schema == G3_SCHEMA_VERSION:
+		config.year_days = r.i32()
+		config.season_days = r.i32()
+		config.seasonal_fields = r.i32() != 0
+		config.field_seed_cost = r.i64()
+		config.granary_capacity = r.i64()
 	return config
 
 

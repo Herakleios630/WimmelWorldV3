@@ -6,6 +6,9 @@ extends RefCounted
 
 const DEBUG_CAPACITY: int = 20000
 const CHRONICLE_CAPACITY: int = 5000
+# Amortisierte Ringpflege: bei Überlauf wird ein Block verworfen, statt pro
+# Event remove_at(0) (O(n)) zu zahlen. Inhalt bleibt "letzte N Events".
+const TRIM_BATCH: int = 4096
 
 var debug_events: Array = []
 var chronicle_events: Array = []
@@ -19,12 +22,21 @@ func emit(time_value: int, type: int, importance: int, agent_id: int,
 	next_event_id += 1
 	debug_events.append(event)
 	if debug_events.size() > DEBUG_CAPACITY:
-		debug_events.remove_at(0)
+		_trim_front(debug_events, DEBUG_CAPACITY)
 	if importance >= SimEvent.IMPORTANCE_NOTABLE:
 		chronicle_events.append(event)
 		if chronicle_events.size() > CHRONICLE_CAPACITY:
-			chronicle_events.remove_at(0)
+			_trim_front(chronicle_events, CHRONICLE_CAPACITY)
 	return event
+
+
+static func _trim_front(items: Array, capacity: int) -> void:
+	var keep: int = maxi(0, capacity - TRIM_BATCH)
+	if items.size() <= keep:
+		return
+	var kept: Array = items.slice(items.size() - keep)
+	items.clear()
+	items.append_array(kept)
 
 
 func recent_debug(limit: int) -> Array:

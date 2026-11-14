@@ -24,7 +24,11 @@ var recalc_budget: int = 2
 var walkable: PackedByteArray = PackedByteArray()
 var _grid: AStarGrid2D
 var _cache: Dictionary = {}
-var _cache_order: PackedInt64Array = PackedInt64Array()
+# Deterministische LRU ohne O(n)-Scan bei jedem Hit: last_used-Tick plus
+# Eviction des kleinsten Ticks (Tie-Break: kleinster Key). Der Cache ist
+# abgeleitet und nicht im Save.
+var _last_used: Dictionary = {}
+var _use_counter: int = 0
 
 var total_requests: int = 0
 var cache_hits: int = 0
@@ -38,17 +42,25 @@ var frame_deferred: int = 0
 var max_lookups_per_frame: int = 0
 var max_recalcs_per_frame: int = 0
 var last_deferred: bool = false
+# Deterministische Warteschlange über Frames: Deferrals werden reihum auf ein
+# 32-Frame-Fenster verteilt, statt im nächsten Frame alle gleichzeitig
+# zurückzukommen. Das verhindert 1000-fache Retry-Wellen.
+const DEFER_WINDOW: int = 32
+var defer_window: int = 1
+var defer_cursor: int = 0
+var last_defer_frames: int = 1
 
 
 func _init(p_world: WorldMap, p_map_version: int = 1,
 		p_cache_capacity: int = 512, p_lookup_budget: int = 50,
-		p_recalc_budget: int = 2) -> void:
+		p_recalc_budget: int = 2, p_defer_window: int = 1) -> void:
 	world = p_world
 	size = p_world.size
 	map_version = p_map_version
 	cache_capacity = maxi(8, p_cache_capacity)
 	lookup_budget = maxi(1, p_lookup_budget)
 	recalc_budget = maxi(1, p_recalc_budget)
+	defer_window = maxi(1, p_defer_window)
 	_build_grid()
 
 
@@ -82,6 +94,7 @@ func begin_frame() -> void:
 	frame_recalcs = 0
 	frame_deferred = 0
 	last_deferred = false
+	last_defer_frames = 1
 
 
 func end_frame() -> void:
@@ -97,9 +110,7 @@ func request_path(start_point: Vector2, goal_point: Vector2) -> PackedVector2Arr
 	last_deferred = false
 	total_requests += 1
 	if frame_lookups >= lookup_budget:
-		frame_deferred += 1
-		deferred_total += 1
-		last_deferred = true
+		_mark_deferred()
 		return PackedVector2Array()
 	frame_lookups += 1
 	var start_tile: Vector2i = _tile_for_point(start_point)
@@ -114,9 +125,7 @@ func request_path(start_point: Vector2, goal_point: Vector2) -> PackedVector2Arr
 		_touch(key)
 		return _materialize(_cache[key] as PackedVector2Array, start_point, goal_point)
 	if frame_recalcs >= recalc_budget:
-		frame_deferred += 1
-		deferred_total += 1
-		last_deferred = true
+		_mark_deferred()
 		return PackedVector2Array()
 	frame_recalcs += 1
 	recalculations += 1
@@ -150,6 +159,17 @@ func prewarm(start_point: Vector2, goal_point: Vector2) -> void:
 
 ## Konventionelle Cache-Hit-Rate: Hits unter den tatsächlich konsultierten
 ## Pfadanfragen. Budget-Vertagungen sind keine Cache-Misses.
+func _mark_deferred() -> void:
+	frame_deferred += 1
+	deferred_total += 1
+	last_deferred = true
+	if defer_window > 1:
+		last_defer_frames = 1 + (defer_cursor % defer_window)
+		defer_cursor += 1
+	else:
+		last_defer_frames = 1
+
+
 func cache_hit_rate() -> float:
 	var consulted: int = cache_hits + cache_misses
 	if consulted <= 0:
@@ -169,7 +189,21 @@ func cache_size() -> int:
 
 func invalidate() -> void:
 	_cache.clear()
-	_cache_order.clear()
+	_last_used.clear()
+	_use_counter = 0
+
+
+## Setzt nur die abgeleitete Laufzeitwarteschlange zurück. Der Cache wird
+## anschließend deterministisch neu aufgebaut; autoritativer Zustand bleibt
+## unberührt. Wird vor Save und nach Load genutzt, damit die Fortsetzung nicht
+## von der Cache-Historie abhängt.
+func reset_defer_runtime() -> void:
+	defer_cursor = 0
+	last_deferred = false
+	last_defer_frames = 1
+	frame_lookups = 0
+	frame_recalcs = 0
+	frame_deferred = 0
 
 
 func set_map_version(version: int) -> void:
@@ -201,30 +235,32 @@ func _cache_key(start_idx: int, goal_idx: int) -> int:
 
 
 func _touch(key: int) -> void:
-	var out: PackedInt64Array = PackedInt64Array()
-	for existing in _cache_order:
-		if existing != key:
-			out.append(existing)
-	out.append(key)
-	_cache_order = out
+	_use_counter += 1
+	_last_used[key] = _use_counter
 
 
 func _store(key: int, path: PackedVector2Array) -> void:
 	if _cache.size() >= cache_capacity:
-		if _cache_order.size() > 0:
-			var evict: int = _cache_order[0]
-			_cache.erase(evict)
-			var out: PackedInt64Array = PackedInt64Array()
-			for i in range(1, _cache_order.size()):
-				out.append(_cache_order[i])
-			_cache_order = out
+		_evict_one()
 	_cache[key] = path
-	_cache_order.append(key)
-	if _cache_order.size() > MAX_CACHE_ORDER:
-		var trim: PackedInt64Array = PackedInt64Array()
-		for i in range(_cache_order.size() - MAX_CACHE_ORDER, _cache_order.size()):
-			trim.append(_cache_order[i])
-		_cache_order = trim
+	_touch(key)
+
+
+func _evict_one() -> void:
+	var evict_key: int = 0
+	var evict_tick: int = 0x7FFFFFFFFFFFFFFF
+	var found: bool = false
+	for key in _cache:
+		var tick: int = int(_last_used.get(key, 0))
+		if not found or tick < evict_tick \
+				or (tick == evict_tick and int(key) < evict_key):
+			evict_key = int(key)
+			evict_tick = tick
+			found = true
+	if not found:
+		return
+	_cache.erase(evict_key)
+	_last_used.erase(evict_key)
 
 
 func _materialize(tile_path: PackedVector2Array, start_point: Vector2,

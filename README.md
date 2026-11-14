@@ -1,7 +1,7 @@
 # WimmelWorld V3
 
-Status: **G3 läuft (1k, 120-Tage-Jahr, saisonale Felder); B-Spike bestanden.**  
-G0.5, G1, G2 und der B-Spike sind abgeschlossen; G3 ist in Arbeit.
+Status: **G3 bestanden (2026-11-14); G4a startet.**  
+G0.5, G1, G2, B-Spike und G3 sind abgeschlossen.
 
 ## Was V3 ist
 
@@ -27,6 +27,7 @@ G0.5, G1, G2 und der B-Spike sind abgeschlossen; G3 ist in Arbeit.
 | `docs/g3/v3-g3-b-spike.md` | B-Spike: 100k@150x, Detailtier 1k/5k, Coarse-Hintergrund |
 | `docs/g3/v3-g3-b-spike-report.md` | B-Spike-Messwerte und Empfehlung |
 | `docs/g3/v3-g3-spec.md` | G3: 1k-Kleinstadt, 120-Tage-Jahr, saisonale Felder |
+| `docs/g3/v3-g3-report.md` | G3: Tests, 120-Tage-Determinismus, Performance, Review |
 | `docs/v3-risk-register.md` | Risiken R1–R18, Auslöser, Gegenmaßnahmen |
 | `docs/v3-g0.5-spike.md` | Technikspike vor G1 (abgeschlossen) |
 | `docs/g0.5/v3-g0.5-results.md` | G0.5-Messwerte, C#-Vergleich, Portentscheid |

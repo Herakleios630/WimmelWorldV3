@@ -79,6 +79,9 @@ func on_agent_wake(row: int) -> void:
 	var guard: int = 0
 	while guard < 8:
 		guard += 1
+		# Pfad- oder G3-Routinejitter-Vertagung: nicht sofort erneut planen.
+		if store.defer_until[row] > now:
+			break
 		var act: int = store.activity[row]
 		if act == AgentStore.ACT_TRAVEL:
 			if now >= store.travel_arrive[row]:
@@ -142,11 +145,33 @@ func on_agent_wake(row: int) -> void:
 	schedule_next(row, now)
 
 
+## G3-Routinejitter spreizt die 6-/7-/8-/13-/17-Uhr-Bursts deterministisch.
+## Ohne Jitter würden 1000 Agenten im selben Batch einen Pfad anfordern; das
+## 50-Lookup-Budget würde über viele Frames deferieren. Lange Fenster
+## (Arbeit/Spiel/Sozial) streuen breiter als kurze Mahlzeiten. G1/G2 bleiben
+## exakt beim bisherigen Zeitplan.
+func _jitter_span_minutes(_act: int) -> int:
+	# 0..89 Minuten; die G3-Pläne haben 90-min-Mahlzeitenfenster und
+	# ausreichend lange Arbeits-/Sozial-/Schlaffenster.
+	return 90
+
+
+func _jitter_for_transition(row: int, at_abs: int) -> int:
+	if not config.is_g3():
+		return 0
+	var minute: int = (at_abs % SimConfig.TICKS_PER_DAY) / 60
+	var entry: PackedInt32Array = RoleSchedule.entry_at(store.role[row], minute,
+		config.is_g3())
+	var span: int = _jitter_span_minutes(entry[2])
+	return ((store.ids[row] * 37 + store.home_id[row]) % span) * 60
+
+
 func schedule_next(row: int, now: int) -> void:
 	if row < 0 or row >= store.count or store.alive[row] == 0:
 		return
 	var act: int = store.activity[row]
 	var best: int = 0
+	var routine_transition: bool = false
 	if act == AgentStore.ACT_TRAVEL:
 		best = store.travel_arrive[row]
 	elif act == AgentStore.ACT_WORK:
@@ -160,24 +185,35 @@ func schedule_next(row: int, now: int) -> void:
 	elif act == AgentStore.ACT_LEARN or act == AgentStore.ACT_PLAY:
 		best = store.action_end[row]
 	else:
-		best = RoleSchedule.next_transition_abs(now, store.role[row])
+		best = RoleSchedule.next_transition_abs(now, store.role[row],
+			config.is_g3())
+		routine_transition = true
+	if routine_transition:
+		best += _jitter_for_transition(row, best)
 	if act == AgentStore.ACT_IDLE or act == AgentStore.ACT_WORK \
 			or act == AgentStore.ACT_LEARN or act == AgentStore.ACT_PLAY:
-		var t_h: int = _need_wake_time(row, now, NEED_HUNGER)
-		if t_h > 0 and t_h < best:
-			best = t_h
-		var t_e: int = _need_wake_time(row, now, NEED_ENERGY)
-		if t_e > 0 and t_e < best:
-			best = t_e
-		var t_s: int = _need_wake_time(row, now, NEED_SOCIAL)
-		if t_s > 0 and t_s < best:
-			best = t_s
-		var t_hy: int = _need_wake_time(row, now, NEED_HYGIENE)
-		if t_hy > 0 and t_hy < best:
-			best = t_hy
-		var t_f: int = _need_wake_time(row, now, NEED_FUN)
-		if t_f > 0 and t_f < best:
-			best = t_f
+		# G3: Ferne Needs brauchen keinen teuren Schwellen-Wake; die nächste
+		# Routinetransition liegt deutlich vor dem Schwellenwert.
+		if not _need_far_from_threshold(row, NEED_HUNGER):
+			var t_h: int = _need_wake_time(row, now, NEED_HUNGER)
+			if t_h > 0 and t_h < best:
+				best = t_h
+		if not _need_far_from_threshold(row, NEED_ENERGY):
+			var t_e: int = _need_wake_time(row, now, NEED_ENERGY)
+			if t_e > 0 and t_e < best:
+				best = t_e
+		if not _need_far_from_threshold(row, NEED_SOCIAL):
+			var t_s: int = _need_wake_time(row, now, NEED_SOCIAL)
+			if t_s > 0 and t_s < best:
+				best = t_s
+		if not _need_far_from_threshold(row, NEED_HYGIENE):
+			var t_hy: int = _need_wake_time(row, now, NEED_HYGIENE)
+			if t_hy > 0 and t_hy < best:
+				best = t_hy
+		if not _need_far_from_threshold(row, NEED_FUN):
+			var t_f: int = _need_wake_time(row, now, NEED_FUN)
+			if t_f > 0 and t_f < best:
+				best = t_f
 	if store.defer_until[row] > now:
 		best = store.defer_until[row]
 	store.defer_until[row] = 0
@@ -187,6 +223,23 @@ func schedule_next(row: int, now: int) -> void:
 	store.next_event[row] = best
 	var payload: int = (store.wake_gen[row] << 32) | (row & 0xFFFFFFFF)
 	scheduler.push(best, SimKinds.EVENT_AGENT_WAKE, payload)
+
+
+func _need_far_from_threshold(row: int, need: int) -> bool:
+	if not config.is_g3():
+		return false
+	match need:
+		NEED_HUNGER:
+			return store.hunger[row] < config.hunger_threshold - 30.0
+		NEED_ENERGY:
+			return store.energy[row] > config.energy_threshold + 25.0
+		NEED_SOCIAL:
+			return store.social[row] > config.social_threshold + 25.0
+		NEED_HYGIENE:
+			return store.hygiene[row] > config.hygiene_threshold + 25.0
+		NEED_FUN:
+			return store.fun[row] > config.fun_threshold + 25.0
+	return false
 
 
 func _need_value(row: int, need: int) -> float:
@@ -206,7 +259,8 @@ func _need_value(row: int, need: int) -> float:
 
 func _routine_activity(row: int, now: int) -> int:
 	var minute: int = (now % SimConfig.TICKS_PER_DAY) / 60
-	var entry: PackedInt32Array = RoleSchedule.entry_at(store.role[row], minute)
+	var entry: PackedInt32Array = RoleSchedule.entry_at(store.role[row], minute,
+		config.is_g3())
 	return entry[2]
 
 
@@ -218,7 +272,7 @@ func _hunger_suppressed(row: int, now: int) -> bool:
 	if now < store.meal_retry[row]:
 		return true
 	if RoleSchedule.seconds_until_next_activity(now, store.role[row],
-			AgentStore.ACT_EAT) <= SimConfig.ROUTINE_LOOKAHEAD_S:
+			AgentStore.ACT_EAT, config.is_g3()) <= SimConfig.ROUTINE_LOOKAHEAD_S:
 		return true
 	return false
 
@@ -229,7 +283,7 @@ func _energy_suppressed(row: int, now: int) -> bool:
 	if _routine_activity(row, now) == AgentStore.ACT_SLEEP:
 		return true
 	if RoleSchedule.seconds_until_next_activity(now, store.role[row],
-			AgentStore.ACT_SLEEP) <= SimConfig.SLEEP_LOOKAHEAD_S:
+			AgentStore.ACT_SLEEP, config.is_g3()) <= SimConfig.SLEEP_LOOKAHEAD_S:
 		return true
 	return false
 
@@ -240,7 +294,7 @@ func _social_suppressed(row: int, now: int) -> bool:
 	if _routine_activity(row, now) == AgentStore.ACT_SOCIAL:
 		return true
 	if RoleSchedule.seconds_until_next_activity(now, store.role[row],
-			AgentStore.ACT_SOCIAL) <= SimConfig.ROUTINE_LOOKAHEAD_S:
+			AgentStore.ACT_SOCIAL, config.is_g3()) <= SimConfig.ROUTINE_LOOKAHEAD_S:
 		return true
 	return false
 
@@ -257,9 +311,9 @@ func _fun_suppressed(row: int, now: int) -> bool:
 			or _routine_activity(row, now) == AgentStore.ACT_SOCIAL:
 		return true
 	var next_play: int = RoleSchedule.seconds_until_next_activity(now,
-		store.role[row], AgentStore.ACT_PLAY)
+		store.role[row], AgentStore.ACT_PLAY, config.is_g3())
 	var next_social: int = RoleSchedule.seconds_until_next_activity(now,
-		store.role[row], AgentStore.ACT_SOCIAL)
+		store.role[row], AgentStore.ACT_SOCIAL, config.is_g3())
 	if next_play >= 0 and next_play <= SimConfig.ROUTINE_LOOKAHEAD_S:
 		return true
 	if next_social >= 0 and next_social <= SimConfig.ROUTINE_LOOKAHEAD_S:
@@ -295,7 +349,7 @@ func _need_wake_time(row: int, now: int, need: int) -> int:
 				# Ein geplantes Routinemahl reduziert Hunger vor dem Termin.
 				var dt0: int = NeedsModel.seconds_to_threshold(store, row, now, need, config)
 				var meal_in: int = RoleSchedule.seconds_until_next_activity(now,
-					store.role[row], AgentStore.ACT_EAT)
+					store.role[row], AgentStore.ACT_EAT, config.is_g3())
 				if meal_in >= 0 and meal_in <= SimConfig.ROUTINE_LOOKAHEAD_S:
 					return -1
 				if dt0 < 0:
@@ -357,8 +411,33 @@ func _field_point(row: int) -> Vector2:
 
 
 func _workshop_point(row: int) -> Vector2:
-	var base: Vector2 = world.door_point(world.workshop_id())
+	var base: Vector2 = world.door_point(world.workshop_id_for_row(row))
 	return world.clamp_point(base + Vector2(float((row % 3) - 1) * 1.4, 0.0))
+
+
+## G3: Ein Feld ist nur im Frühling (pflügen/säen) und im Herbst (ernten)
+## bearbeitbar. Außerhalb der Fenster gehen Feldarbeiter zur Werkstatt, statt
+## wirkungslose Feldarbeit zu protokollieren.
+func _field_actionable(field: Building) -> bool:
+	if field == null or field.kind != Building.KIND_FIELD:
+		return false
+	if not config.seasonal_fields:
+		return true
+	var day: int = clock.day_index()
+	var year: int = config.year_of_day(day)
+	if config.is_spring_day(day):
+		if field.field_crop_year == year:
+			return false
+		return field.field_stage == Building.FIELD_FALLOW \
+			or field.field_stage == Building.FIELD_PLOWING \
+			or field.field_stage == Building.FIELD_PLOWED \
+			or field.field_stage == Building.FIELD_SOWING
+	if config.is_autumn_day(day):
+		if field.field_harvested_year == year:
+			return false
+		return field.field_stage == Building.FIELD_RIPE \
+			or field.field_stage == Building.FIELD_HARVESTING
+	return false
 
 
 func _plaza_point(row: int) -> Vector2:
@@ -377,16 +456,24 @@ func _resolve_place(row: int, place: int) -> Array:
 	var home_point: Vector2 = _home_point(row)
 	match place:
 		RoleSchedule.PLACE_FIELD:
-			return [_field_id_for_row(row), _field_point(row)]
+			var field_id: int = _field_id_for_row(row)
+			var field: Building = world.building_by_id(field_id)
+			if not _field_actionable(field):
+				return [world.workshop_id_for_row(row), _workshop_point(row)]
+			return [field_id, _field_point(row)]
 		RoleSchedule.PLACE_WORKSHOP:
-			return [world.workshop_id(), _workshop_point(row)]
+			return [world.workshop_id_for_row(row), _workshop_point(row)]
 		RoleSchedule.PLACE_PLAZA:
 			return [world.well_id(), _plaza_point(row)]
 		RoleSchedule.PLACE_JOB:
 			if store.job_kind[row] == AgentStore.JOB_FIELD:
-				return [_field_id_for_row(row), _field_point(row)]
+				var fid: int = _field_id_for_row(row)
+				var field2: Building = world.building_by_id(fid)
+				if not _field_actionable(field2):
+					return [world.workshop_id_for_row(row), _workshop_point(row)]
+				return [fid, _field_point(row)]
 			if store.job_kind[row] == AgentStore.JOB_WORKSHOP:
-				return [world.workshop_id(), _workshop_point(row)]
+				return [world.workshop_id_for_row(row), _workshop_point(row)]
 			return [home_id, home_point]
 		_:
 			return [home_id, home_point]
@@ -395,11 +482,16 @@ func _resolve_place(row: int, place: int) -> Array:
 func _apply_routine(row: int, now: int) -> void:
 	var role: int = store.role[row]
 	var minute: int = (now % SimConfig.TICKS_PER_DAY) / 60
-	var entry: PackedInt32Array = RoleSchedule.entry_at(role, minute)
+	var entry: PackedInt32Array = RoleSchedule.entry_at(role, minute,
+		config.is_g3())
 	var act: int = entry[2]
-	var end_abs: int = RoleSchedule.entry_end_abs(now, role)
+	var end_abs: int = RoleSchedule.entry_end_abs(now, role, config.is_g3())
 	if act == AgentStore.ACT_SLEEP:
 		end_abs = _extend_sleep_if_needed(end_abs, row)
+	# G3: auch feste Aktionsenden (12:00/17:00/18:00/6:00) deterministisch
+	# spreizen, damit nicht 1000 Agents im selben Batch enden.
+	if config.is_g3():
+		end_abs += _jitter_for_transition(row, end_abs)
 	var place: Array = _resolve_place(row, entry[3])
 	_go_or_act(row, act, place[0], place[1], end_abs, SOURCE_ROUTINE)
 
@@ -462,10 +554,12 @@ func _extend_sleep_if_needed(end_time: int, row: int) -> int:
 	while guard < 4:
 		guard += 1
 		var minute: int = (result % SimConfig.TICKS_PER_DAY) / 60
-		var entry: PackedInt32Array = RoleSchedule.entry_at(store.role[row], minute)
+		var entry: PackedInt32Array = RoleSchedule.entry_at(store.role[row],
+			minute, config.is_g3())
 		if entry[2] != AgentStore.ACT_SLEEP:
 			break
-		var entry_end: int = RoleSchedule.entry_end_abs(result, store.role[row])
+		var entry_end: int = RoleSchedule.entry_end_abs(result, store.role[row],
+			config.is_g3())
 		if entry_end <= result:
 			break
 		result = entry_end
@@ -526,6 +620,7 @@ func _begin_action(row: int, act: int, now: int, end_time: int, source: int) -> 
 			agent_id, "activity_start", AgentStore.activity_name(act), act)
 
 
+
 func _finish_work(row: int, now: int) -> void:
 	if store.work_start[row] >= 0:
 		var worked: int = now - store.work_start[row]
@@ -555,9 +650,15 @@ func _finish_meal(row: int, now: int) -> void:
 		_host().meals_skipped += 1
 		_host().year_meals_skipped += 1
 		store.meal_retry[row] = now + SimConfig.SHORTAGE_RETRY_S
-		_host().log_event(SimEvent.T_MEAL_SKIPPED, SimEvent.IMPORTANCE_NOTABLE,
-			_agent_id(row), "meal_skipped", "kein Grain", _host().grain)
 		var day: int = clock.day_index()
+		# G3 aggregiert die sichtbare Mahlzeiten-Knappheit pro Agent/Tag an
+		# der Quelle; der autoritative Zähler meals_skipped bleibt exakt.
+		var log_this_skip: bool = true
+		if config.is_g3() and store.shortage_logged_day[row] == day:
+			log_this_skip = false
+		if log_this_skip:
+			_host().log_event(SimEvent.T_MEAL_SKIPPED, SimEvent.IMPORTANCE_NOTABLE,
+				_agent_id(row), "meal_skipped", "kein Grain", _host().grain)
 		if store.shortage_logged_day[row] != day:
 			store.shortage_logged_day[row] = day
 			_host().log_event(SimEvent.T_SHORTAGE, SimEvent.IMPORTANCE_MAJOR,
@@ -685,16 +786,28 @@ func _field_on_work_start(field_id: int) -> void:
 		return
 	match field.field_stage:
 		Building.FIELD_FALLOW:
+			if config.seasonal_fields and not config.is_spring_day(clock.day_index()):
+				return
+			if config.seasonal_fields \
+					and field.field_crop_year == config.year_of_day(clock.day_index()):
+				return
 			_field_set_stage(field, Building.FIELD_PLOWING)
 		Building.FIELD_PLOWED:
+			if config.seasonal_fields and not config.is_spring_day(clock.day_index()):
+				return
 			_field_set_stage(field, Building.FIELD_SOWING)
 		Building.FIELD_RIPE:
+			if config.seasonal_fields and not config.is_autumn_day(clock.day_index()):
+				return
 			_field_set_stage(field, Building.FIELD_HARVESTING)
 
 
 func _field_add_work(field_id: int, seconds: int) -> void:
 	var field: Building = world.building_by_id(field_id)
 	if field == null or field.kind != Building.KIND_FIELD or seconds <= 0:
+		return
+	if config.seasonal_fields:
+		_field_add_work_seasonal(field, seconds)
 		return
 	var required: int = 0
 	match field.field_stage:
@@ -728,18 +841,96 @@ func _field_add_work(field_id: int, seconds: int) -> void:
 			scheduler.push(field.field_growth_end, SimKinds.EVENT_FIELD_TICK,
 				payload)
 		Building.FIELD_HARVESTING:
-			var yield_grain: int = config.field_harvest_yield
-			var host_h = _host()
-			host_h.grain += yield_grain
-			host_h.grain_produced += yield_grain
-			host_h.grain_harvested += yield_grain
-			host_h.harvests_completed += 1
-			host_h.field_cycles_completed += 1
-			host_h.year_grain_produced += yield_grain
-			host_h.year_harvests += 1
-			host_h.log_event(SimEvent.T_FIELD_HARVEST, SimEvent.IMPORTANCE_MAJOR,
-				0, "field_harvest", "Ernte eingelagert", yield_grain)
-			_field_set_stage(field, Building.FIELD_FALLOW)
+			_apply_harvest(field)
+
+
+## G3: Frühling pflügen/säen, Sommer wachsen, Herbst ernten, Winter Brache.
+## Genau eine Ernte pro Feld und Jahr; Saatgut wird beim Abschluss der Aussaat
+## aus dem Kornspeicher abgezogen.
+func _field_add_work_seasonal(field: Building, seconds: int) -> void:
+	var day: int = clock.day_index()
+	var year: int = config.year_of_day(day)
+	var required: int = 0
+	match field.field_stage:
+		Building.FIELD_PLOWING:
+			if not config.is_spring_day(day):
+				return
+			required = config.field_plow_work_s
+		Building.FIELD_SOWING:
+			if not config.is_spring_day(day):
+				return
+			required = config.field_sow_work_s
+		Building.FIELD_HARVESTING:
+			if not config.is_autumn_day(day):
+				return
+			required = config.field_harvest_work_s
+	if required <= 0:
+		return
+	field.field_work_s += seconds
+	if field.field_work_s < required:
+		return
+	field.field_work_s = 0
+	match field.field_stage:
+		Building.FIELD_PLOWING:
+			_field_set_stage(field, Building.FIELD_PLOWED)
+		Building.FIELD_SOWING:
+			var host = _host()
+			if config.field_seed_cost > 0 and host.grain < config.field_seed_cost:
+				_field_set_stage(field, Building.FIELD_PLOWED)
+				if field.field_last_shortage_day != day:
+					field.field_last_shortage_day = day
+					host.log_event(SimEvent.T_FIELD_STAGE,
+						SimEvent.IMPORTANCE_NOTABLE, 0, "field_stage",
+						"kein Saatgut", field.id)
+				return
+			if config.field_seed_cost > 0:
+				host.grain -= config.field_seed_cost
+				host.grain_seed_used += config.field_seed_cost
+			field.field_crop_year = year
+			var grow_end: int = config.autumn_start_day(day) \
+				* SimConfig.TICKS_PER_DAY
+			if grow_end <= _now():
+				grow_end = config.next_year_start_day(day) \
+					* SimConfig.TICKS_PER_DAY
+			_field_set_stage(field, Building.FIELD_SOWN)
+			host.log_event(SimEvent.T_FIELD_SOWN, SimEvent.IMPORTANCE_NOTABLE,
+				0, "field_sown", "Aussaat abgeschlossen", grow_end)
+			_field_set_stage(field, Building.FIELD_GROWING)
+			field.field_growth_end = grow_end
+			field.field_growth_gen += 1
+			var payload: int = (field.id << 32) \
+				| (field.field_growth_gen & 0xFFFFFFFF)
+			scheduler.push(field.field_growth_end, SimKinds.EVENT_FIELD_TICK,
+				payload)
+		Building.FIELD_HARVESTING:
+			_apply_harvest(field)
+
+
+func _apply_harvest(field: Building) -> void:
+	var host = _host()
+	var yield_grain: int = config.field_harvest_yield
+	var overflow: int = 0
+	if config.granary_capacity > 0:
+		var room: int = maxi(0, config.granary_capacity - host.grain)
+		if yield_grain > room:
+			overflow = yield_grain - room
+			yield_grain = room
+	host.grain += yield_grain
+	host.grain_produced += yield_grain
+	host.grain_harvested += yield_grain
+	host.grain_overflow += overflow
+	host.harvests_completed += 1
+	host.field_cycles_completed += 1
+	host.year_grain_produced += yield_grain
+	host.year_harvests += 1
+	var season: int = config.season_index_for_day(clock.day_index())
+	if season >= 0 and season < host.harvest_season_counts.size():
+		host.harvest_season_counts[season] += 1
+	if config.seasonal_fields:
+		field.field_harvested_year = config.year_of_day(clock.day_index())
+	host.log_event(SimEvent.T_FIELD_HARVEST, SimEvent.IMPORTANCE_MAJOR,
+		0, "field_harvest", "Ernte eingelagert", yield_grain)
+	_field_set_stage(field, Building.FIELD_FALLOW)
 
 
 func on_field_tick(field_id: int, gen: int) -> void:

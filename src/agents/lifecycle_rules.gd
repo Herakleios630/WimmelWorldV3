@@ -52,15 +52,23 @@ static func is_guardian(age: int) -> bool:
 	return age >= 18
 
 
-static func age_from_birth_day(birth_day: int, day: int) -> int:
+static func age_from_birth_day(birth_day: int, day: int,
+		config: SimConfig = null) -> int:
 	var elapsed: int = day - birth_day
 	if elapsed < 0:
 		return 0
-	return elapsed / SimConfig.YEAR_DAYS
+	var year_days: int = SimConfig.YEAR_DAYS
+	if config != null:
+		year_days = maxi(1, config.year_days)
+	return elapsed / year_days
 
 
-static func birth_day_for_age(age: int, day: int) -> int:
-	return day - age * SimConfig.YEAR_DAYS
+static func birth_day_for_age(age: int, day: int,
+		config: SimConfig = null) -> int:
+	var year_days: int = SimConfig.YEAR_DAYS
+	if config != null:
+		year_days = maxi(1, config.year_days)
+	return day - age * year_days
 
 
 static func annual_death_rate(config: SimConfig, age: int) -> float:

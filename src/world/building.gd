@@ -33,6 +33,12 @@ var field_stage: int = FIELD_FALLOW
 var field_work_s: int = 0
 var field_growth_end: int = 0
 var field_growth_gen: int = 0
+# G3-Saisonalität: ein Feld hat genau eine Ernte pro Jahr. crop_year ist das
+# Jahr, in dem gesät wurde; harvested_year verhindert eine zweite Ernte im
+# selben Jahr. -1 = noch nie.
+var field_crop_year: int = -1
+var field_harvested_year: int = -1
+var field_last_shortage_day: int = -1
 
 
 func _init(p_id: int = 0, p_kind: int = 0, p_name: String = "",

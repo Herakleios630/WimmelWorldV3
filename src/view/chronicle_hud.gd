@@ -245,7 +245,8 @@ func refresh(p_sim: Simulation, force: bool = false) -> void:
 	if sim == null or not _built:
 		return
 	var now_ms: int = Time.get_ticks_msec()
-	if not force and now_ms - _last_refresh_ms < 250:
+	var throttle_ms: int = 1000 if sim.config.is_g3() else 250
+	if not force and now_ms - _last_refresh_ms < throttle_ms:
 		return
 	_last_refresh_ms = now_ms
 	_follow_button.text = "Follow an" if view_state.follow_enabled else "Follow F"

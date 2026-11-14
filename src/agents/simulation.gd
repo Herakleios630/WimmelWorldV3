@@ -32,10 +32,13 @@ var replay_meta: Dictionary = {}
 var grain: int = 0
 var grain_produced: int = 0
 var grain_harvested: int = 0
+var grain_seed_used: int = 0
+var grain_overflow: int = 0
 var meals_served: int = 0
 var meals_skipped: int = 0
 var harvests_completed: int = 0
 var field_cycles_completed: int = 0
+var harvest_season_counts: PackedInt32Array = PackedInt32Array([0, 0, 0, 0])
 var births: int = 0
 var deaths: int = 0
 var partnerships_formed: int = 0
@@ -78,11 +81,13 @@ func setup_new(p_config: SimConfig) -> void:
 	scheduler = EventScheduler.new()
 	logs = SimLogs.new()
 	chronicle = ChronicleStore.new(config)
+	chronicle.ensure_agent_index()
 	batcher = EventBatcher.new()
 	decisions = DecisionSystem.new(self)
 	lifecycle = LifecycleSystem.new(self)
 	pathfinder = _make_pathfinder()
-	if config.profile == SimConfig.PROFILE_G2:
+	if config.profile == SimConfig.PROFILE_G2 \
+			or config.profile == SimConfig.PROFILE_G3:
 		var generated: Dictionary = PopulationGenerator.generate(world, config)
 		records = generated["records"]
 		households = generated["households"]
@@ -94,10 +99,13 @@ func setup_new(p_config: SimConfig) -> void:
 	grain = config.start_grain
 	grain_produced = 0
 	grain_harvested = 0
+	grain_seed_used = 0
+	grain_overflow = 0
 	meals_served = 0
 	meals_skipped = 0
 	harvests_completed = 0
 	field_cycles_completed = 0
+	harvest_season_counts = PackedInt32Array([0, 0, 0, 0])
 	births = 0
 	deaths = 0
 	partnerships_formed = 0
@@ -130,27 +138,41 @@ func setup_new(p_config: SimConfig) -> void:
 
 
 func _spawn_initial_agents() -> void:
+	var row: int = 0
 	for record in records:
 		var rec: AgentRecord = record
 		var home_point: Vector2 = world.door_point(rec.home_building_id)
+		# G3 startet am selben Home-Offset wie die Routine. Sonst würden alle
+		# 1000 Agenten beim ersten Wake einen 1-2-Tile-Pfad anfordern und das
+		# harte Lookup-Budget für Stunden verstopfen. G1/G2 bleiben am Türpunkt.
+		if config.is_g3():
+			home_point = world.clamp_point(home_point + Vector2(
+				(float(row % 4) - 1.5) * 1.2, 0.0))
 		store.add_agent(rec.id, rec.age_years, rec.role, rec.household_id,
 			rec.home_building_id, rec.job_id, rec.job_kind,
 			home_point.x, home_point.y,
 			config.start_hunger, config.start_energy, config.start_social,
 			clock.now, config.start_hygiene, config.start_fun,
 			config.start_health, rec.sex, rec.birth_day)
+		row += 1
 
 
 func _make_pathfinder() -> PathFinder:
-	if config.profile != SimConfig.PROFILE_G2:
+	if config.profile != SimConfig.PROFILE_G2 \
+			and config.profile != SimConfig.PROFILE_G3:
 		return null
+	var defer_window: int = PathFinder.DEFER_WINDOW \
+		if config.profile == SimConfig.PROFILE_G3 else 1
 	return PathFinder.new(world, config.map_version,
 		config.path_cache_capacity, config.path_lookup_budget,
-		config.path_recalc_budget)
+		config.path_recalc_budget, defer_window)
 
 
 func _prewarm_paths() -> void:
 	if pathfinder == null or decisions == null:
+		return
+	if config.profile == SimConfig.PROFILE_G3:
+		_prewarm_paths_g3()
 		return
 	for row in store.count:
 		if store.alive[row] == 0:
@@ -167,6 +189,28 @@ func _prewarm_paths() -> void:
 		for start_point in points:
 			for goal_point in anchors:
 				pathfinder.prewarm(start_point, goal_point)
+
+
+## G3-Prewarming deckt die tatsächlichen täglichen Pendelziele der 1000
+## Agenten ab (Home <-> Feld/Werkstatt/Plaza/Brunnen). Dadurch sind die
+## 6-Uhr-/8-Uhr-Bursts Cache-Hits und das harte 2-Recalc-Budget wird nicht
+## durch den Erstaufbau verstopft. Der Cache bleibt abgeleitet.
+func _prewarm_paths_g3() -> void:
+	for row in store.count:
+		if store.alive[row] == 0:
+			continue
+		var points: PackedVector2Array = decisions.warmup_points(row)
+		if points.size() < 6:
+			continue
+		var home: Vector2 = points[1]
+		var anchors: PackedVector2Array = PackedVector2Array()
+		anchors.append(points[2])  # assigned field
+		anchors.append(points[3])  # workshop
+		anchors.append(points[4])  # plaza
+		anchors.append(points[5])  # well
+		for anchor in anchors:
+			pathfinder.prewarm(home, anchor)
+			pathfinder.prewarm(anchor, home)
 
 
 func _schedule_initial_field_ticks() -> void:
@@ -194,7 +238,12 @@ func path_was_deferred() -> bool:
 ## Der Frame hängt damit nicht von der advance_to-Chunk-Größe des Aufrufers ab.
 func deferred_wake_time() -> int:
 	var span: int = maxi(1, config.path_frame_ticks)
-	return ((clock.now / span) + 1) * span
+	var base: int = ((clock.now / span) + 1) * span
+	if pathfinder != null:
+		# Warteschlangen-Slot statt Sofort-Retry: 50 Deferrals pro Frame.
+		var extra_frames: int = maxi(0, pathfinder.last_defer_frames - 1)
+		return base + extra_frames * span
+	return base
 
 
 func advance_to(target_time: int) -> int:
@@ -252,9 +301,10 @@ func _dispatch(kind: int, payload: int) -> void:
 		log_event(SimEvent.T_DAY_START, SimEvent.IMPORTANCE_ROUTINE,
 			0, "day_start", "Tag beginnt", day)
 		lifecycle.on_day_tick(day)
-		if config.profile == SimConfig.PROFILE_G2:
+		if config.profile == SimConfig.PROFILE_G2 \
+				or config.profile == SimConfig.PROFILE_G3:
 			routes.compact(store)
-		if day > 0 and day % SimConfig.YEAR_DAYS == 0:
+		if day > 0 and day % maxi(1, config.year_days) == 0:
 			_complete_year()
 		var next_midnight: int = (clock.day_index() + 1) * SimConfig.TICKS_PER_DAY
 		scheduler.push(next_midnight, SimKinds.EVENT_DAY_TICK, 0)
@@ -333,6 +383,10 @@ func state_hash() -> int:
 	h = HashUtil.mix_i64(h, grain)
 	h = HashUtil.mix_i64(h, grain_produced)
 	h = HashUtil.mix_i64(h, grain_harvested)
+	h = HashUtil.mix_i64(h, grain_seed_used)
+	h = HashUtil.mix_i64(h, grain_overflow)
+	for i in harvest_season_counts.size():
+		h = HashUtil.mix(h, harvest_season_counts[i])
 	h = HashUtil.mix_i64(h, meals_served)
 	h = HashUtil.mix_i64(h, meals_skipped)
 	h = HashUtil.mix_i64(h, harvests_completed)
@@ -351,6 +405,9 @@ func state_hash() -> int:
 		h = HashUtil.mix_i64(h, field.field_work_s)
 		h = HashUtil.mix_i64(h, field.field_growth_end)
 		h = HashUtil.mix(h, field.field_growth_gen)
+		h = HashUtil.mix(h, field.field_crop_year)
+		h = HashUtil.mix(h, field.field_harvested_year)
+		h = HashUtil.mix(h, field.field_last_shortage_day)
 	h = HashUtil.mix_i64(h, year_index)
 	h = HashUtil.mix_i64(h, year_start_grain)
 	h = HashUtil.mix_i64(h, year_grain_produced)
@@ -406,6 +463,7 @@ func rebuild_runtime() -> void:
 		world = WorldMap.create_for_config(config)
 	if chronicle == null:
 		chronicle = ChronicleStore.new(config)
+	chronicle.ensure_agent_index()
 	if batcher == null:
 		batcher = EventBatcher.new()
 	decisions = DecisionSystem.new(self)
@@ -415,6 +473,14 @@ func rebuild_runtime() -> void:
 
 
 func save_to(path: String) -> Dictionary:
+	# Der Pfad-Cache ist abgeleitet und wird nicht gespeichert. Damit Save/Load
+	# exakt bleibt, wird er vor dem Save deterministisch geleert/neu aufgebaut
+	# und die Defer-Warteschlange zurückgesetzt; der Load macht dasselbe.
+	if pathfinder != null:
+		pathfinder.invalidate()
+		pathfinder.reset_defer_runtime()
+		_path_frame_index = -1
+		_prewarm_paths()
 	return SimSave.save_simulation(self, path)
 
 

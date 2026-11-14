@@ -50,7 +50,8 @@ nicht in A integriert.
   - Netto **9.000/Feld**,
   - 40 Felder = 360.000 Netto-Grain/Jahr; 1.000 Agenten × 3 Mahlzeiten ×
     120 Tage = 360.000 Mahlzeiten.
-  - Startgrain 90.000; Kornspeicher-Kapazität 720.000 (2 Jahre).
+  - Startgrain 360.000 (ein Jahresvorrat für 1.000 Agenten × 3 Mahlzeiten
+    × 120 Tage); Kornspeicher-Kapazität 720.000 (2 Jahre).
 - Keine Ernte außerhalb des Herbstfensters; keine stille Auffüllung.
 - Genaue Werte sind G3-Kalibrierung, keine finale Wirtschaft.
 

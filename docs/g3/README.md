@@ -1,3 +1,58 @@
+# G3 — A-Kleinstadt und B-Spike
+
+## G3-A: 1000 Agenten, 120-Tage-Jahr, saisonale Felder
+
+Status: **G3-A bestanden** (Suite 13/13, 235 Checks; 2026-11-14). G3 ist ein
+eigenes A-Profil; B bleibt ein separater Spike.
+
+- 768×768-Kleinstadt, 224 Wohnhäuser, 40 Felder, 3 Werkstätten,
+  Kornspeicher, Brunnen, Scheune, Wege.
+- 1000 Agenten in 225 Haushalten; ca. 40 % erwerbsfähig.
+- 120-Tage-Jahr mit 4×30-Tage-Seasons; G1/G2 bleiben beim 30-Tage-Jahr.
+- Saisonale Felder: eine Ernte/Feld/Jahr, 40 Herbsternten, 0 außerhalb.
+- A*/Pfad-Cache/Chunking, 2 Recalcs + 50 Lookups/Frame, Event-Batching.
+- Save-Schema 6 nur für G3; Schema 1–5 sichtbar abgelehnt; G1/G2 Schema 5.
+- Chronik/UI auf 1k skaliert; D-57 nur Stubs; keine G4-/B-Integration.
+
+### Startbefehle
+
+```powershell
+$godot = "C:\Users\ajsch\AppData\Local\Microsoft\WinGet\Packages\GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe\Godot_v4.7.2-stable_win64_console.exe"
+
+# Headless-Abnahme (T-G3-01..10; 3x120 Tage, ca. 20-30 Minuten)
+& $godot --headless --path C:\coding\WimmelWorld\V3 res://tests/g3/g3_a_suite.tscn
+
+# Sichtbare Demo
+& $godot --path C:\coding\WimmelWorld\V3 res://tests/g3/demo.tscn
+
+# Visueller 5-Minuten-Performancelauf, dreimal
+& $godot --path C:\coding\WimmelWorld\V3 res://tests/g3/bench_visual.tscn -- --run=1
+& $godot --path C:\coding\WimmelWorld\V3 res://tests/g3/bench_visual.tscn -- --run=2
+& $godot --path C:\coding\WimmelWorld\V3 res://tests/g3/bench_visual.tscn -- --run=3
+
+# Sichtbarer 5-Minuten-Smoke ab Tag 55 (Sommer -> Herbst -> Ernten)
+& $godot --path C:\coding\WimmelWorld\V3 res://tests/g3/visual_120days.tscn
+```
+
+Ergebnisse: `bench/results/g3_a_suite.log`,
+`bench/results/g3_visual_run1..3.json`,
+`bench/results/g3_120days_result.json`, `bench/results/g3_120days_day*.png`.
+
+Kernwerte: Startgrain 360.000 (Jahresvorrat), 0 Mahlzeiten-Skips, 1.040
+Lebende nach 120 Tagen, 40 Herbsternten/0 außerhalb, 120 Tage deterministisch
+(Chunks 1/60/3600, State `0x5D49B80C`), 1k@50x Sim-p95 4,75–4,84 ms, visuell
+Frame-p95 4,48–4,52 ms/Render-p95 4,12–4,13 ms, Save-Schema 6 exakt (4,09 MB).
+Bericht: `docs/g3/v3-g3-report.md`.
+
+### G3-A Test-IDs
+
+T-G3-01 Welt/Bevölkerung, T-G3-02 Kalender, T-G3-03 saisonale Felder,
+T-G3-04 A*/Cache/Chunking, T-G3-05 Batching, T-G3-06 120-Tage-Determinismus,
+T-G3-07 Save/Load Schema 6, T-G3-08 1k@50x, T-G3-09 UI/Chronik,
+T-G3-10 D-57/Scope. G1a/G1b/G2 bleiben unverändert grün.
+
+---
+
 # G3 — B-Spike (deterministisches Tiering, 100k@150x/200x)
 
 Status: **B-Spike messbar bestanden** (2026-11-14). Kein finales B, keine UI,

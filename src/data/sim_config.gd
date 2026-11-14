@@ -1,25 +1,40 @@
 class_name SimConfig
 extends RefCounted
 
-## G1b-Konfiguration. Nur autoritative Sim-Parameter.
+## G1b/G2/G3-Konfiguration. Nur autoritative Sim-Parameter.
 ## Kamera, Zoom, Sichtbarkeit und Speed sind bewusst NICHT enthalten.
+##
+## Historische Profile G1/G2 bleiben beim 30-Tage-Jahr, beim ganzjährigen
+## Feldzyklus und beim Save-Schema 5. G3 ist ein eigenes Profil mit
+## 120-Tage-Jahr, 4x30-Tage-Seasons, saisonalen Feldern und Save-Schema 6.
 
 const SCHEMA_VERSION: int = 5
 const GAME_VERSION: int = 5
+const G3_SCHEMA_VERSION: int = 6
+const G3_GAME_VERSION: int = 6
 
 const TICKS_PER_DAY: int = 86400
 const MINUTES_PER_DAY: int = 1440
 const YEAR_DAYS: int = 30
+const SEASON_DAYS: int = 30
 const SEASONS: int = 4
 const MAP_SIZE: int = 128
 const MAP_SIZE_G2: int = 384
+const MAP_SIZE_G3: int = 768
 
 ## G1-Weltprofil (10 Agenten, 128x128) bleibt der unveränderte G1-Default.
 ## G2 nutzt explizit SimConfig.g2(): 384x384, 100 Agenten, 20-25 Haushalte.
+## G3 nutzt SimConfig.g3(): 768x768, 1000 Agenten, 200-250 Haushalte.
 const PROFILE_G1: int = 0
 const PROFILE_G2: int = 1
+const PROFILE_G3: int = 2
 const G2_TARGET_AGENTS: int = 100
 const G2_TARGET_HOUSEHOLDS: int = 24
+const G3_TARGET_AGENTS: int = 1000
+const G3_TARGET_HOUSEHOLDS: int = 225
+const G3_FIELD_COUNT: int = 40
+const G3_YEAR_DAYS: int = 120
+const G3_SEASON_DAYS: int = 30
 
 const TILE_METERS: float = 1.5
 const PIXELS_PER_TILE: int = 16
@@ -50,6 +65,12 @@ const FIELD_HARVEST_WORK_S: int = 16 * 3600
 const FIELD_GROW_S: int = 4 * 86400
 const FIELD_HARVEST_YIELD: int = 220
 
+# G3-Platzhalter-Balance aus der G3-Spec. Keine finale Wirtschaft.
+const G3_FIELD_GROSS_YIELD: int = 10000
+const G3_FIELD_SEED_COST: int = 1000
+const G3_START_GRAIN: int = 360000
+const G3_GRANARY_CAPACITY: int = 720000
+
 var seed: int = DEFAULT_SEED
 var start_time: int = DEFAULT_START_TIME
 
@@ -58,6 +79,14 @@ var profile: int = PROFILE_G1
 var world_size: int = MAP_SIZE
 var target_agents: int = 10
 var target_households: int = 3
+
+# Kalender-/Feldprofil. G1/G2: 30-Tage-Jahr, ganzjähriger G1b-Feldzyklus.
+# G3: 120 Tage, 4x30 Seasons, eine Ernte/Feld/Jahr.
+var year_days: int = YEAR_DAYS
+var season_days: int = SEASON_DAYS
+var seasonal_fields: bool = false
+var field_seed_cost: int = 0
+var granary_capacity: int = 0
 
 # G2-Pfadbudget. Die Budgets beeinflussen, wann ein Pfad vertagt wird, sind
 # damit autoritativ und Teil des Config-Hashs. Der Cache selbst ist abgeleitet.
@@ -148,7 +177,7 @@ var field_grow_s: int = FIELD_GROW_S
 var field_harvest_yield: int = FIELD_HARVEST_YIELD
 
 # G1b-Schritt 3: Chronik-/Retention-Budgets. Reine Darstellungs-/Speicher-
-# politik; sie beeinflussen weder Need- noch Lebenszyklusentscheidungen.
+# entscheidungen; sie beeinflussen weder Need- noch Lebenszyklusentscheidungen.
 # Die Byte-Budgets aus docs/v3-chronicle.md werden über die Anzahl-Reports
 # in ChronicleStore.budget_info() ausgewiesen.
 var chronicle_recent_days: int = 7
@@ -179,6 +208,104 @@ static func g2(seed_value: int = DEFAULT_SEED) -> SimConfig:
 	return c
 
 
+## G3-Profil: 1000 Agenten, 225 Haushalte, 40 Felder, 120-Tage-Jahr mit
+## 4x30-Tage-Seasons. Der Lebenszyklus behält 6 Rollen/Jahr; das Intervall
+## wird auf 20 Tage gestreckt, damit Jahressterblichkeit/-fertilität und
+## RNG-Konsum pro Jahr mit G1b vergleichbar bleiben.
+static func g3(seed_value: int = DEFAULT_SEED) -> SimConfig:
+	var c: SimConfig = SimConfig.new()
+	c.seed = seed_value
+	c.profile = PROFILE_G3
+	c.world_size = MAP_SIZE_G3
+	c.target_agents = G3_TARGET_AGENTS
+	c.target_households = G3_TARGET_HOUSEHOLDS
+	c.year_days = G3_YEAR_DAYS
+	c.season_days = G3_SEASON_DAYS
+	c.seasonal_fields = true
+	c.start_grain = G3_START_GRAIN
+	c.granary_capacity = G3_GRANARY_CAPACITY
+	c.field_harvest_yield = G3_FIELD_GROSS_YIELD
+	c.field_seed_cost = G3_FIELD_SEED_COST
+	c.field_plow_work_s = FIELD_PLOW_WORK_S
+	c.field_sow_work_s = FIELD_SOW_WORK_S
+	c.field_harvest_work_s = FIELD_HARVEST_WORK_S
+	c.path_cache_capacity = 16384
+	c.path_recalc_budget = 2
+	c.path_lookup_budget = 50
+	c.path_frame_ticks = 80
+	c.map_version = 1
+	c.lifecycle_first_roll_day = 10
+	c.lifecycle_roll_interval_days = 20
+	c.lifecycle_rolls_per_year = 6
+	c.chronicle_summary_days = G3_YEAR_DAYS
+	c.chronicle_summary_max = 50000
+	return c
+
+
+func is_g3() -> bool:
+	return profile == PROFILE_G3
+
+
+func save_schema_version() -> int:
+	return G3_SCHEMA_VERSION if is_g3() else SCHEMA_VERSION
+
+
+func game_version_for_save() -> int:
+	return G3_GAME_VERSION if is_g3() else GAME_VERSION
+
+
+## 0-basierter Tag innerhalb des Jahres.
+func day_of_year(day: int) -> int:
+	var span: int = maxi(1, year_days)
+	return day % span
+
+
+func year_of_day(day: int) -> int:
+	return day / maxi(1, year_days)
+
+
+## Season-Index 0..3. G3 nutzt echte 30-Tage-Seasons; G1/G2 behalten die
+## historische 30-Tage-Jahr-Anzeige (4 Viertel im 30-Tage-Jahr).
+func season_index_for_day(day: int) -> int:
+	if seasonal_fields:
+		return (day_of_year(day) / maxi(1, season_days)) % SEASONS
+	return (day_of_year(day) * SEASONS) / maxi(1, year_days)
+
+
+func season_name_for_day(day: int) -> String:
+	return ["Frühling", "Sommer", "Herbst", "Winter"][season_index_for_day(day)]
+
+
+## Absoluter Tagesindex des Season-Starts im Jahr von `day`.
+func season_start_day(day: int) -> int:
+	var year_start: int = day - day_of_year(day)
+	if seasonal_fields:
+		return year_start + season_index_for_day(day) * season_days
+	return year_start
+
+
+## Absoluter Tagesindex des Herbststarts im Jahr von `day`.
+func autumn_start_day(day: int) -> int:
+	var year_start: int = day - day_of_year(day)
+	if seasonal_fields:
+		return year_start + 2 * season_days
+	# G1/G2 haben keinen saisonalen Feldfenster; der bestehende Feldzyklus
+	# nutzt diesen Wert nicht.
+	return year_start + int(round(float(year_days) * 0.5))
+
+
+func next_year_start_day(day: int) -> int:
+	return day - day_of_year(day) + maxi(1, year_days)
+
+
+func is_spring_day(day: int) -> bool:
+	return seasonal_fields and season_index_for_day(day) == 0
+
+
+func is_autumn_day(day: int) -> bool:
+	return seasonal_fields and season_index_for_day(day) == 2
+
+
 func config_hash() -> int:
 	var h: int = HashUtil.FNV_OFFSET
 	h = HashUtil.mix(h, SCHEMA_VERSION)
@@ -190,6 +317,11 @@ func config_hash() -> int:
 	h = HashUtil.mix(h, world_size)
 	h = HashUtil.mix(h, target_agents)
 	h = HashUtil.mix(h, target_households)
+	h = HashUtil.mix(h, year_days)
+	h = HashUtil.mix(h, season_days)
+	h = HashUtil.mix(h, 1 if seasonal_fields else 0)
+	h = HashUtil.mix_i64(h, field_seed_cost)
+	h = HashUtil.mix_i64(h, granary_capacity)
 	h = HashUtil.mix(h, path_cache_capacity)
 	h = HashUtil.mix(h, path_recalc_budget)
 	h = HashUtil.mix(h, path_lookup_budget)

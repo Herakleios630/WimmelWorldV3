@@ -1,6 +1,6 @@
 # WimmelWorld V3 — Planung
 
-Status: G3 läuft (1k, 120-Tage-Jahr, saisonale Felder); G0–G2/B-Spike bestanden  
+Status: G3 bestanden (2026-11-14); G4a läuft (10k-Kern)  
 Stand: 2026-11-14  
 Arbeitsmodus: **Umsetzung läuft; G3 in Arbeit. Keine V1/V2-Änderungen, keine stillen Fidelity-/Balanceänderungen.**
 
@@ -1140,12 +1140,13 @@ Tiefensimulation; Verschiebung pro Gate erlaubt.
 
 ### 4.12 Status 2026-11-14
 
-- **G0, G0.5, G1, G1a.1, G1b 1–3, G2 und B-Spike abgeschlossen.**
-- **G3 läuft:** 1.000-Agenten-Kleinstadt, 120-Tage-Jahr, saisonale Felder,
-  A*/Chunk/Save-Stress, D-57 Stubs.
+- **G0, G0.5, G1, G1a.1, G1b 1–3, G2, B-Spike und G3 abgeschlossen.**
+- **G3:** 1.000-Agenten-Kleinstadt, 120-Tage-Jahr, saisonale Felder,
+  A*/Chunk/Save-Stress, D-57 Stubs; 360.000 Startgrain, 0 Skips, 1.040
+  Lebende, 40 Herbsternten.
 - **A/B:** getrennte Welten; Cursed Beyond 1x/A, WimmelWorld standalone
   150x/B. B-Spike bestätigt 100k@150x auf Simulationsebene.
-- **Git:** `b-spike` getaggt; `g3` folgt nach G3-Abnahme, danach `g4a`/`g4b`.
+- **Git:** `b-spike`, `g2`, `g3` getaggt; G4a läuft, danach `g4a`/`g4b`.
 
 ### 4.13 Nachtrag 2026-11-14 — Kalender und Felder
 
@@ -1155,8 +1156,9 @@ Tiefensimulation; Verschiebung pro Gate erlaubt.
 G1/G2 bleiben historische 30-Tage-Profile. Ein Feld hat **eine Ernte pro Jahr**
 (Frühling pflügen/säen, Sommer wachsen, Herbst ernten, Winter Brache).
 40 Felder für 1.000 Agenten, 4 für 100; Bruttoertrag 10.000, Saatgut 1.000,
-Netto 9.000/Feld; 90.000 Startgrain, 720.000 Kornspeicher. Werte sind
-G3-Kalibrierung, keine finale Wirtschaft.
+Netto 9.000/Feld; **360.000 Startgrain** (ein Jahresvorrat), 720.000
+Kornspeicher. G3-Kalibrierung: 360.000 verhindert die unnötige erste-
+Jahr-Hungersnot; Werte sind keine finale Wirtschaft.
 
 #### D-66 — A/B-Produktschnitt
 

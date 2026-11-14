@@ -9,6 +9,11 @@ extends RefCounted
 ## G2 (PROFILE_G2): 384x384-Bauerschaft mit 24 Häusern, 4 Feldern,
 ## Kornspeicher, Brunnen, Werkstatt, Scheune und einem Tile-Wegnetz. Die
 ## Pfadfindung läuft über PathFinder/A*, nicht über den G1-Waypoint-Graphen.
+##
+## G3 (PROFILE_G3): 768x768-Kleinstadt mit 224 Häusern, 40 Feldern, drei
+## Werkstätten, Kornspeicher, Brunnen, Scheune, Wegen und einem deterministischen
+## Chunk-Index. Der Chunk-Index ist abgeleitet und nur für Materialisierung/
+## Darstellung; die Simulation bleibt kameraunabhängig.
 
 const SIZE: int = SimConfig.MAP_SIZE
 const IDX_EMPTY: int = -1
@@ -34,13 +39,23 @@ var decor_trees: PackedVector2Array = PackedVector2Array()
 var field_work_point: Vector2 = Vector2.ZERO
 var plaza_point: Vector2 = Vector2.ZERO
 
+const CHUNK_SIZE: int = 32
+
 var _house_ids: PackedInt32Array = PackedInt32Array()
 var _field_ids: PackedInt32Array = PackedInt32Array()
 var _field_work_points: PackedVector2Array = PackedVector2Array()
+var _workshop_ids: PackedInt32Array = PackedInt32Array()
 var _granary_id: int = B_GRANARY
 var _well_id: int = B_WELL
 var _workshop_id: int = B_WORKSHOP
 var _barn_id: int = -1
+
+# Abgeleiteter Chunk-Index (nicht im Save): 1 = Chunk enthält Siedlungs-/
+## Wege-/Feldmaterial. Die Simulation liest keine Kamera/Sichtbarkeit.
+var chunk_size: int = CHUNK_SIZE
+var chunk_count_x: int = 0
+var chunk_count_y: int = 0
+var chunk_active: PackedByteArray = PackedByteArray()
 
 
 func _init(seed_value: int = 1, p_profile: int = SimConfig.PROFILE_G1,
@@ -48,17 +63,23 @@ func _init(seed_value: int = 1, p_profile: int = SimConfig.PROFILE_G1,
 	profile = p_profile
 	if p_size > 0:
 		size = p_size
+	elif profile == SimConfig.PROFILE_G3:
+		size = SimConfig.MAP_SIZE_G3
+	elif profile == SimConfig.PROFILE_G2:
+		size = SimConfig.MAP_SIZE_G2
 	else:
-		size = SimConfig.MAP_SIZE_G2 if profile == SimConfig.PROFILE_G2 \
-			else SimConfig.MAP_SIZE
+		size = SimConfig.MAP_SIZE
 	occupied.resize(size * size)
 	road.resize(size * size)
-	if profile == SimConfig.PROFILE_G2:
+	if profile == SimConfig.PROFILE_G3:
+		_build_g3_settlement()
+	elif profile == SimConfig.PROFILE_G2:
 		_build_g2_settlement()
 	else:
 		_build_buildings()
 		_build_roads()
 		_build_graph()
+	_build_chunk_index()
 	_scatter_decor(seed_value)
 
 
@@ -179,6 +200,136 @@ func _build_g2_settlement() -> void:
 	plaza_point = Vector2(196.5, 165.5)
 
 
+func _build_g3_settlement() -> void:
+	# 224 Wohnhäuser in 14 Spalten x 16 Reihen. Jede Tür liegt auf einer
+	# Querstraße; zwischen den Spalten verlaufen Längsstraßen.
+	var next_id: int = 1
+	for row in 16:
+		for col in 14:
+			var x: int = 64 + col * 40
+			var y: int = 64 + row * 32
+			buildings.append(Building.new(next_id, Building.KIND_HOUSE,
+				"Haus %d" % next_id, Rect2i(x, y, 8, 8),
+				Vector2i(x + 4, y + 8)))
+			_house_ids.append(next_id)
+			next_id += 1
+	for row in 16:
+		_road_rect(Rect2i(48, 64 + row * 32 + 8, 560, 3))
+	for col in 15:
+		_road_rect(Rect2i(48 + col * 40, 64, 3, 492))
+	# Feldzugang und öffentlicher Bereich östlich der Häuser.
+	_road_rect(Rect2i(608, 64, 12, 304))
+	# 40 Felder in 5 Spalten x 8 Reihen (je 24x24 Tiles, 4 Tiles Abstand).
+	for f_row in 8:
+		for f_col in 5:
+			var fx: int = 620 + f_col * 28
+			var fy: int = 64 + f_row * 28
+			var fid: int = next_id
+			next_id += 1
+			buildings.append(Building.new(fid, Building.KIND_FIELD,
+				"Feld %d" % (f_row * 5 + f_col + 1),
+				Rect2i(fx, fy, 24, 24), Vector2i(fx - 1, fy + 12)))
+			_field_ids.append(fid)
+			_field_work_points.append(Vector2(float(fx) + 12.5,
+				float(fy) + 12.5))
+	_granary_id = next_id
+	buildings.append(Building.new(_granary_id, Building.KIND_GRANARY,
+		"Kornspeicher", Rect2i(620, 300, 18, 12), Vector2i(629, 312)))
+	next_id += 1
+	_barn_id = next_id
+	buildings.append(Building.new(_barn_id, Building.KIND_BARN, "Scheune",
+		Rect2i(620, 320, 16, 12), Vector2i(628, 332)))
+	next_id += 1
+	_well_id = next_id
+	buildings.append(Building.new(_well_id, Building.KIND_WELL, "Brunnen",
+		Rect2i(620, 360, 4, 4), Vector2i(620, 364)))
+	next_id += 1
+	for w in 3:
+		var wid: int = next_id
+		next_id += 1
+		_workshop_ids.append(wid)
+		buildings.append(Building.new(wid, Building.KIND_WORKSHOP,
+			"Werkstatt %d" % (w + 1),
+			Rect2i(620 + w * 20, 340, 12, 10),
+			Vector2i(626 + w * 20, 350)))
+	_workshop_id = _workshop_ids[0]
+	for building in buildings:
+		var b: Building = building
+		if b.kind == Building.KIND_FIELD:
+			continue
+		for y in range(b.rect.position.y, b.rect.position.y + b.rect.size.y):
+			for x in range(b.rect.position.x, b.rect.position.x + b.rect.size.x):
+				if x >= 0 and x < size and y >= 0 and y < size:
+					occupied[_idx(x, y)] = 1
+	# Öffentliche Zugangswege zu Kornspeicher, Scheune, Werkstätten, Brunnen.
+	_road_rect(Rect2i(608, 312, 96, 3))
+	_road_rect(Rect2i(608, 332, 96, 3))
+	_road_rect(Rect2i(608, 350, 96, 3))
+	_road_rect(Rect2i(608, 364, 72, 3))
+	field_work_point = _field_work_points[0]
+	plaza_point = Vector2(700.5, 375.5)
+
+
+## Leitet den Chunk-Index aus dem autoritativen Siedlungszustand ab. Chunks
+## mit Gebäuden, Wegen oder Feldern gelten als materialisiert; die Auswahl ist
+## deterministisch und hängt nicht von der Kamera ab.
+func _build_chunk_index() -> void:
+	chunk_count_x = int(ceil(float(size) / float(chunk_size)))
+	chunk_count_y = chunk_count_x
+	chunk_active.resize(chunk_count_x * chunk_count_y)
+	chunk_active.fill(0)
+	for y in size:
+		for x in size:
+			if road[_idx(x, y)] == 0:
+				continue
+			_mark_chunk(x, y)
+	for building in buildings:
+		var b: Building = building
+		for y in range(b.rect.position.y, b.rect.position.y + b.rect.size.y):
+			for x in range(b.rect.position.x, b.rect.position.x + b.rect.size.x):
+				if b.kind == Building.KIND_FIELD:
+					_mark_chunk(x, y)
+				elif x >= 0 and x < size and y >= 0 and y < size:
+					_mark_chunk(x, y)
+
+
+func _mark_chunk(x: int, y: int) -> void:
+	if x < 0 or x >= size or y < 0 or y >= size:
+		return
+	var cx: int = x / chunk_size
+	var cy: int = y / chunk_size
+	chunk_active[cy * chunk_count_x + cx] = 1
+
+
+func chunk_for_tile(x: int, y: int) -> int:
+	if x < 0 or x >= size or y < 0 or y >= size:
+		return -1
+	return (y / chunk_size) * chunk_count_x + (x / chunk_size)
+
+
+func is_chunk_active(chunk_index: int) -> bool:
+	return chunk_index >= 0 and chunk_index < chunk_active.size() \
+		and chunk_active[chunk_index] != 0
+
+
+func materialized_chunk_count() -> int:
+	var n: int = 0
+	for value in chunk_active:
+		if value != 0:
+			n += 1
+	return n
+
+
+func chunk_state_hash() -> int:
+	var h: int = HashUtil.FNV_OFFSET
+	h = HashUtil.mix(h, chunk_size)
+	h = HashUtil.mix(h, chunk_count_x)
+	h = HashUtil.mix(h, size)
+	for value in chunk_active:
+		h = HashUtil.mix(h, value)
+	return h
+
+
 func _build_roads() -> void:
 	_road_rect(Rect2i(40, 62, 52, 5))
 	_road_rect(Rect2i(62, 48, 5, 41))
@@ -229,8 +380,14 @@ func _edge(a: int, b: int) -> void:
 
 func _scatter_decor(seed_value: int) -> void:
 	var rng: RngStream = RngStream.new(seed_value * 17 + 31)
-	var target_count: int = 260 if profile == SimConfig.PROFILE_G2 else 180
-	var guard_max: int = 12000 if profile == SimConfig.PROFILE_G2 else 4000
+	var target_count: int = 180
+	var guard_max: int = 4000
+	if profile == SimConfig.PROFILE_G2:
+		target_count = 260
+		guard_max = 12000
+	elif profile == SimConfig.PROFILE_G3:
+		target_count = 700
+		guard_max = 40000
 	var placed: int = 0
 	var guard: int = 0
 	while placed < target_count and guard < guard_max:
@@ -241,6 +398,10 @@ func _scatter_decor(seed_value: int) -> void:
 			continue
 		if profile == SimConfig.PROFILE_G2:
 			if x >= 80 and x <= 326 and y >= 86 and y <= 250:
+				continue
+		elif profile == SimConfig.PROFILE_G3:
+			# Bebaute Siedlungsfläche freihalten; Bäume nur am Rand.
+			if x >= 40 and x <= 760 and y >= 40 and y <= 570:
 				continue
 		else:
 			if x >= 38 and x <= 108 and y >= 50 and y <= 90:
@@ -438,6 +599,16 @@ func well_id() -> int:
 
 func workshop_id() -> int:
 	return _workshop_id
+
+
+func workshop_ids() -> PackedInt32Array:
+	return _workshop_ids.duplicate()
+
+
+func workshop_id_for_row(row: int) -> int:
+	if _workshop_ids.is_empty():
+		return _workshop_id
+	return _workshop_ids[row % _workshop_ids.size()]
 
 
 func barn_id() -> int:

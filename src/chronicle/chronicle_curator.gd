@@ -20,8 +20,20 @@ const ALL_CATEGORIES: Array = [
 	CAT_TRAVEL, CAT_SYSTEM,
 ]
 
+## Klassifikation ist typbasiert; ein Cache spart bei 1k die Dictionary-
+## Allokation pro Routine-Event. Das Ergebnis wird nur gelesen.
+static var _class_cache: Dictionary = {}
+
 
 static func classify(event: SimEvent) -> Dictionary:
+	if _class_cache.has(event.type):
+		return _class_cache[event.type]
+	var meta: Dictionary = _classify_uncached(event)
+	_class_cache[event.type] = meta
+	return meta
+
+
+static func _classify_uncached(event: SimEvent) -> Dictionary:
 	var category: String = CAT_SYSTEM
 	var importance: int = event.importance
 	var template: String = event.template_key

@@ -79,7 +79,21 @@ static func default_relationships() -> Array:
 	return out
 
 
+## Records sind nach ID sortiert (auch nach Geburten, die fortlaufende IDs
+## erhalten). Binärsuche hält Inspector/Chronik bei 1000 Agenten O(log n).
 static func record_by_id(records: Array, agent_id: int) -> AgentRecord:
+	var lo: int = 0
+	var hi: int = records.size() - 1
+	while lo <= hi:
+		var mid: int = (lo + hi) / 2
+		var rec: AgentRecord = records[mid]
+		if rec.id == agent_id:
+			return rec
+		if rec.id < agent_id:
+			lo = mid + 1
+		else:
+			hi = mid - 1
+	# Fallback für nicht sortierte Test-/Sonderarrays.
 	for record in records:
 		if (record as AgentRecord).id == agent_id:
 			return record

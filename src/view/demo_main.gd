@@ -24,7 +24,12 @@ func _ready() -> void:
 	view_state = ViewState.new()
 	view_state.speed = 1
 	view_state.camera_position = Vector2(sim.world.size * 0.5, sim.world.size * 0.5)
-	view_state.zoom = 0.65 if sim.config.profile == SimConfig.PROFILE_G2 else 1.6
+	if sim.config.profile == SimConfig.PROFILE_G3:
+		view_state.zoom = 0.42
+	elif sim.config.profile == SimConfig.PROFILE_G2:
+		view_state.zoom = 0.65
+	else:
+		view_state.zoom = 1.6
 	world_view = WorldView.new()
 	add_child(world_view)
 	world_view.configure(sim, view_state)
@@ -44,7 +49,11 @@ func _ready() -> void:
 	add_child(chronicle_hud)
 	chronicle_hud.configure(sim, view_state)
 	_update_day_night()
-	var gate: String = "G2 100 Agenten" if sim.config.profile == SimConfig.PROFILE_G2 else "G1b"
+	var gate: String = "G1b"
+	if sim.config.profile == SimConfig.PROFILE_G3:
+		gate = "G3 1000 Agenten · 120-Tage-Jahr"
+	elif sim.config.profile == SimConfig.PROFILE_G2:
+		gate = "G2 100 Agenten"
 	hud.show_status("%s läuft. F: Follow · T: Familie · C: Chronik" % gate, 6.0)
 
 

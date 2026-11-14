@@ -56,7 +56,8 @@ func _update_birthdays(day: int) -> void:
 	for row in store.count:
 		if store.alive[row] == 0:
 			continue
-		var new_age: int = LifecycleRules.age_from_birth_day(store.birth_day[row], day)
+		var new_age: int = LifecycleRules.age_from_birth_day(store.birth_day[row],
+			day, _config())
 		if new_age <= store.age_years[row]:
 			continue
 		store.age_years[row] = new_age
