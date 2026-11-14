@@ -209,6 +209,11 @@ Commits/Pushes erstellt.
    Zoomstufen sind nicht Teil der Abnahme.
 8. Der sichtbare 30-Tage-Lauf dient der UI-/Chronik-Beobachtung; die harte
    Determinismus-Abnahme läuft headless.
+9. **Felder laufen ganzjährig ohne Saisonfenster.** 4 Felder mit je ~5,2 Tagen
+   Zyklus (20 h Pflügen + 8 h Säen + 4 Tage Wachstum + 16 h Ernte) ergeben ca.
+   **0,77 Ernten/Tag** bzw. ~21 Ernten/30 Tage à 600 Grain = 12.600 Grain. Das
+   ist ein G2-Skalierungsplatzhalter, kein Logikfehler; G3/G4 muss Saisonalität,
+   Saatgut, Lager und Ertrag kalibrieren.
 
 ## 11. Abnahmebeurteilung
 
@@ -247,3 +252,6 @@ Unabhängig vom Implementierungslauf ausgeführt:
    Beobachtungsmodus prüfen.
 4. **Dynamik:** Dynamische Kollision und regionaler Graph bleiben spätere
    Gates; G2 nutzt statische Occupancy und lokale A*.
+5. **Feld-/Ernte-Balance:** Ganzjährige Zyklen und 600 Grain/Feld erzeugen
+   ~0,77 Ernten/Tag. In G3/G4 saisonale Fenster, Saatgutabzug, Lagerkapazität
+   und einen Zielertrag (~4 Ernten/Jahr/Feld) definieren.
