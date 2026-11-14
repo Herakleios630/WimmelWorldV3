@@ -72,7 +72,8 @@ func _init(p_world: WorldMap, p_map_version: int = 1,
 	lookup_budget = maxi(1, p_lookup_budget)
 	recalc_budget = maxi(1, p_recalc_budget)
 	defer_window = maxi(1, p_defer_window)
-	scale_mode = p_world.profile == SimConfig.PROFILE_SCALE
+	scale_mode = p_world.profile == SimConfig.PROFILE_SCALE \
+		or p_world.profile == SimConfig.PROFILE_CIVIC
 	if scale_mode:
 		_build_scale_grid()
 	else:

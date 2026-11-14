@@ -53,12 +53,9 @@ static func run(ctx: G1aTestContext) -> void:
 				"Netzwerk-Abhängigkeit in: " + path)
 	ctx.check_eq(SimConfig.SCHEMA_VERSION, 5, "Config-Schema ist nicht 5")
 	ctx.check_eq(SimSave.SCHEMA_VERSION, 5, "Save-Schema ist nicht 5")
-	ctx.check(not DirAccess.dir_exists_absolute(
-		ProjectSettings.globalize_path("res://src/economy")),
-		"G4-Wirtschaftsmodul vorhanden")
-	ctx.check(not DirAccess.dir_exists_absolute(
-		ProjectSettings.globalize_path("res://src/politics")),
-		"G5-Politikmodul vorhanden")
+	# D-68: Die historische G1b-Suite verbietet keine späteren Gate-Module
+	# mehr. Wirtschaft/Politik sind ab G4b ausdrücklich erlaubt; die
+	# Verhaltensprüfungen dieser Suite bleiben unverändert.
 	ctx.check(FileAccess.file_exists("res://src/navigation/path_finder.gd"),
 		"G2-PathFinder fehlt")
 	ctx.check(FileAccess.file_exists("res://src/data/d57_stubs.gd"),

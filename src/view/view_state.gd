@@ -22,3 +22,5 @@ var chronicle_filter_agent_id: int = 0
 var chronicle_filter_household_id: int = 0
 var chronicle_filter_importance: int = 0
 var chronicle_filter_days: int = 7
+# G4b: reine Sichtbarkeit der Wirtschafts-/Politikpanels. Kein Sim-Effekt.
+var economy_visible: bool = true

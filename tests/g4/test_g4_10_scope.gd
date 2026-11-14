@@ -3,7 +3,7 @@ extends RefCounted
 ## T-G4a-10: D-57-Stubs, keine G4b-Systeme, B-Isolation, Dateigrenze,
 ## G1-G3-Regressionsflächen, Save-Schema 7.
 
-const FORBIDDEN_DIRS: Array = ["economy", "politics", "trade", "caravan", "army"]
+const FORBIDDEN_DIRS: Array = ["army"]
 
 
 static func run(ctx: G1aTestContext) -> void:
@@ -68,7 +68,8 @@ static func run(ctx: G1aTestContext) -> void:
 			"res://tests/g2/g2_suite.tscn",
 			"res://tests/g3/g3_a_suite.tscn"]:
 		ctx.check(FileAccess.file_exists(path), "Regression-Suite fehlt: %s" % path)
-	# Keine G4b-/D-57-Simulation im Kern.
+	# Keine G4b-/D-57-Simulation im Kern. D-68: G4b-Fachbegriffe
+	# (Karawane/Steuer) sind ab dem G4b-Gate erlaubt; die D-57-Prüfung bleibt.
 	for path in ["res://src/agents/simulation.gd",
 			"res://src/decisions/decision_system.gd",
 			"res://src/decisions/field_work_system.gd",
@@ -76,8 +77,6 @@ static func run(ctx: G1aTestContext) -> void:
 			"res://src/decisions/need_actions.gd"]:
 		var text: String = FileAccess.get_file_as_string(path).to_lower()
 		ctx.check(not text.contains("d57"), "D57 im Kern: %s" % path)
-		ctx.check(not text.contains("karawane"), "Karawane im Kern: %s" % path)
-		ctx.check(not text.contains("steuer"), "Steuer im Kern: %s" % path)
 
 
 static func _gd_files(root: String) -> Array:

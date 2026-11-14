@@ -12,7 +12,8 @@ const G2_SEED_SALT: int = 704602925
 
 
 static func generate(world: WorldMap, config: SimConfig) -> Dictionary:
-	if config.profile == SimConfig.PROFILE_SCALE:
+	if config.profile == SimConfig.PROFILE_SCALE \
+			or config.profile == SimConfig.PROFILE_CIVIC:
 		return generate_scale(world, config)
 	if config.profile == SimConfig.PROFILE_G3:
 		return generate_g3(world, config)

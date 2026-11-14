@@ -16,6 +16,7 @@ const SCHEMA_VERSION: int = 5
 const GAME_VERSION: int = 5
 const G3_SCHEMA_VERSION: int = SimConfig.G3_SCHEMA_VERSION
 const SCALE_SCHEMA_VERSION: int = SimConfig.SCALE_SCHEMA_VERSION
+const CIVIC_SCHEMA_VERSION: int = SimConfig.CIVIC_SCHEMA_VERSION
 const COMPRESSED_MAGIC: int = 0x5A535444
 const HEADER_SIZE: int = 28
 const MAX_ARRAY: int = 2000000
@@ -32,7 +33,7 @@ static func save_simulation(sim: Simulation, path: String) -> Dictionary:
 	_encode_payload(sim, payload_writer)
 	var payload: PackedByteArray = payload_writer.buf
 	var schema: int = sim.config.save_schema_version()
-	if schema == SCALE_SCHEMA_VERSION:
+	if schema == SCALE_SCHEMA_VERSION or schema == CIVIC_SCHEMA_VERSION:
 		var packed: PackedByteArray = payload.compress(FileAccess.COMPRESSION_ZSTD)
 		var cw: ByteWriter = ByteWriter.new()
 		cw.u32(COMPRESSED_MAGIC)
@@ -82,7 +83,8 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 		return {"ok": false, "error": "bad_magic", "magic": magic}
 	var schema: int = header.u32()
 	if schema != SCHEMA_VERSION and schema != G3_SCHEMA_VERSION \
-			and schema != SCALE_SCHEMA_VERSION:
+			and schema != SCALE_SCHEMA_VERSION \
+			and schema != CIVIC_SCHEMA_VERSION:
 		return {"ok": false, "error": "unsupported_schema", "schema": schema}
 	var game_version: int = header.u32()
 	if game_version < 1:
@@ -92,7 +94,7 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 	if payload_size < 0 or HEADER_SIZE + payload_size > bytes.size():
 		return {"ok": false, "error": "bad_payload_size", "payload_size": payload_size}
 	var payload: PackedByteArray = bytes.slice(HEADER_SIZE, HEADER_SIZE + payload_size)
-	if schema == SCALE_SCHEMA_VERSION:
+	if schema == SCALE_SCHEMA_VERSION or schema == CIVIC_SCHEMA_VERSION:
 		var packed_reader: ByteReader = ByteReader.new(payload)
 		var compressed_magic: int = packed_reader.u32()
 		var uncompressed_size: int = packed_reader.u64()
@@ -190,6 +192,10 @@ static func decode_bytes(bytes: PackedByteArray) -> Dictionary:
 	sim.routes = _read_routes(reader)
 	_read_logs(reader, sim)
 	sim.chronicle = ChronicleStore.read_from(reader, config)
+	if config.politics_enabled:
+		sim.politics = PoliticsSystem.read_from(reader, config)
+	if config.economy_enabled:
+		sim.economy = EconomySystem.read_from(reader, config)
 	var replay_version: int = reader.i32()
 	var replay_seed: int = reader.i64()
 	var replay_config_hash: int = reader.i64()
@@ -295,6 +301,40 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 		w.i64(config.granary_capacity)
 	if config.save_schema_version() == SCALE_SCHEMA_VERSION:
 		w.i32(1 if config.suppress_routine_events else 0)
+	if config.save_schema_version() == CIVIC_SCHEMA_VERSION:
+		w.i32(1 if config.suppress_routine_events else 0)
+		w.i32(1 if config.economy_enabled else 0)
+		w.i32(1 if config.politics_enabled else 0)
+		w.i32(config.tax_rate_permille)
+		w.i32(config.wage_field)
+		w.i32(config.wage_workshop)
+		w.i32(config.wage_light)
+		w.i64(config.household_start_money)
+		w.i64(config.household_money_cap)
+		w.i64(config.market_grain_start)
+		w.i64(config.market_wood_start)
+		w.i64(config.market_tool_start)
+		w.i64(config.market_grain_target)
+		w.i64(config.market_wood_target)
+		w.i64(config.market_tool_target)
+		w.i64(config.market_grain_daily_supply)
+		w.i64(config.market_wood_daily_supply)
+		w.i64(config.market_tool_daily_supply)
+		w.i64(config.nation_start_treasury)
+		w.i64(config.budget_granary)
+		w.i64(config.budget_roads)
+		w.i64(config.budget_guards)
+		w.i64(config.budget_reserve)
+		w.i64(config.caravan_capacity)
+		w.i64(config.caravan_travel_days)
+		w.i64(config.caravan_dispatch_interval_days)
+		w.i64(config.caravan_transport_cost)
+		w.i64(config.tariff_permille)
+		w.i64(config.treaty_tariff_permille)
+		w.i64(config.crisis_cooldown_days)
+		w.i64(config.unrest_threshold)
+		w.i64(config.price_spike_permille)
+		w.i64(config.shortage_grain_threshold)
 
 	w.i64(sim.clock.now)
 	var sched: EventScheduler = sim.scheduler
@@ -371,6 +411,14 @@ static func _encode_payload(sim: Simulation, w: ByteWriter) -> void:
 	if chronicle == null:
 		chronicle = ChronicleStore.new(config)
 	chronicle.write_to(w)
+	if config.politics_enabled:
+		if sim.politics == null:
+			sim.politics = PoliticsSystem.new(config)
+		sim.politics.write_to(w)
+	if config.economy_enabled:
+		if sim.economy == null:
+			sim.economy = EconomySystem.new(config)
+		sim.economy.write_to(w)
 	var meta: Dictionary = Replay.replay_meta(sim)
 	w.i32(int(meta["version"]))
 	w.i64(int(meta["seed"]))
@@ -694,6 +742,10 @@ static func _read_config(r: ByteReader, schema: int) -> SimConfig:
 		r.ok = false
 		r.error = "unsupported_schema"
 		return config
+	if schema == CIVIC_SCHEMA_VERSION and config.profile != SimConfig.PROFILE_CIVIC:
+		r.ok = false
+		r.error = "unsupported_schema"
+		return config
 	config.world_size = r.i32()
 	config.target_agents = r.i32()
 	config.target_households = r.i32()
@@ -772,6 +824,40 @@ static func _read_config(r: ByteReader, schema: int) -> SimConfig:
 		config.granary_capacity = r.i64()
 	if schema == SCALE_SCHEMA_VERSION:
 		config.suppress_routine_events = r.i32() != 0
+	if schema == CIVIC_SCHEMA_VERSION:
+		config.suppress_routine_events = r.i32() != 0
+		config.economy_enabled = r.i32() != 0
+		config.politics_enabled = r.i32() != 0
+		config.tax_rate_permille = r.i32()
+		config.wage_field = r.i32()
+		config.wage_workshop = r.i32()
+		config.wage_light = r.i32()
+		config.household_start_money = r.i64()
+		config.household_money_cap = r.i64()
+		config.market_grain_start = r.i64()
+		config.market_wood_start = r.i64()
+		config.market_tool_start = r.i64()
+		config.market_grain_target = r.i64()
+		config.market_wood_target = r.i64()
+		config.market_tool_target = r.i64()
+		config.market_grain_daily_supply = r.i64()
+		config.market_wood_daily_supply = r.i64()
+		config.market_tool_daily_supply = r.i64()
+		config.nation_start_treasury = r.i64()
+		config.budget_granary = r.i64()
+		config.budget_roads = r.i64()
+		config.budget_guards = r.i64()
+		config.budget_reserve = r.i64()
+		config.caravan_capacity = r.i64()
+		config.caravan_travel_days = r.i64()
+		config.caravan_dispatch_interval_days = r.i64()
+		config.caravan_transport_cost = r.i64()
+		config.tariff_permille = r.i64()
+		config.treaty_tariff_permille = r.i64()
+		config.crisis_cooldown_days = r.i64()
+		config.unrest_threshold = r.i64()
+		config.price_spike_permille = r.i64()
+		config.shortage_grain_threshold = r.i64()
 	config.compute_derived_rates()
 	return config
 

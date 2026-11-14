@@ -15,6 +15,8 @@ const G3_SCHEMA_VERSION: int = 6
 const G3_GAME_VERSION: int = 6
 const SCALE_SCHEMA_VERSION: int = 7
 const SCALE_GAME_VERSION: int = 7
+const CIVIC_SCHEMA_VERSION: int = 8
+const CIVIC_GAME_VERSION: int = 8
 
 const TICKS_PER_DAY: int = 86400
 const MINUTES_PER_DAY: int = 1440
@@ -34,6 +36,9 @@ const PROFILE_G1: int = 0
 const PROFILE_G2: int = 1
 const PROFILE_G3: int = 2
 const PROFILE_SCALE: int = 3
+## G4b: gleicher 10k-Kern wie PROFILE_SCALE, aber mit aktivierter
+## Wirtschaft/Politik und eigenem Save-Schema 8.
+const PROFILE_CIVIC: int = 4
 const G2_TARGET_AGENTS: int = 100
 const G2_TARGET_HOUSEHOLDS: int = 24
 const G3_TARGET_AGENTS: int = 1000
@@ -224,6 +229,41 @@ var field_harvest_work_s: int = FIELD_HARVEST_WORK_S
 var field_grow_s: int = FIELD_GROW_S
 var field_harvest_yield: int = FIELD_HARVEST_YIELD
 
+# G4b-Wirtschaft/Politik. Nur im PROFILE_CIVIC aktiv; G1/G2/G3/G4a bleiben
+# bitgleich, weil alle Hooks an diese Flags gebunden sind.
+var economy_enabled: bool = false
+var politics_enabled: bool = false
+var tax_rate_permille: int = 100
+var wage_field: int = 2
+var wage_workshop: int = 3
+var wage_light: int = 1
+var household_start_money: int = 200
+var household_money_cap: int = 3000
+var market_grain_start: int = 50000
+var market_wood_start: int = 12000
+var market_tool_start: int = 3000
+var market_grain_target: int = 60000
+var market_wood_target: int = 15000
+var market_tool_target: int = 4000
+var market_grain_daily_supply: int = 700
+var market_wood_daily_supply: int = 2000
+var market_tool_daily_supply: int = 400
+var nation_start_treasury: int = 1000000
+var budget_granary: int = 150
+var budget_roads: int = 80
+var budget_guards: int = 120
+var budget_reserve: int = 50
+var caravan_capacity: int = 200
+var caravan_travel_days: int = 3
+var caravan_dispatch_interval_days: int = 3
+var caravan_transport_cost: int = 100
+var tariff_permille: int = 100
+var treaty_tariff_permille: int = 50
+var crisis_cooldown_days: int = 10
+var unrest_threshold: int = 70
+var price_spike_permille: int = 1500
+var shortage_grain_threshold: int = 10000
+
 # G1b-Schritt 3: Chronik-/Retention-Budgets. Reine Darstellungs-/Speicher-
 # entscheidungen; sie beeinflussen weder Need- noch Lebenszyklusentscheidungen.
 # Die Byte-Budgets aus docs/v3-chronicle.md werden über die Anzahl-Reports
@@ -327,12 +367,59 @@ static func scale(seed_value: int = DEFAULT_SEED) -> SimConfig:
 	return c
 
 
+## G4b-Profil: identischer 10k-Kern wie scale(), aber mit Wirtschaft/Politik
+## und Save-Schema 8. G4a bleibt bei scale()/Schema 7.
+static func civic(seed_value: int = DEFAULT_SEED) -> SimConfig:
+	var c: SimConfig = SimConfig.scale(seed_value)
+	c.profile = PROFILE_CIVIC
+	c.economy_enabled = true
+	c.politics_enabled = true
+	c.tax_rate_permille = 100
+	c.wage_field = 2
+	c.wage_workshop = 3
+	c.wage_light = 1
+	c.household_start_money = 200
+	c.household_money_cap = 3000
+	c.market_grain_start = 50000
+	c.market_wood_start = 12000
+	c.market_tool_start = 3000
+	c.market_grain_target = 60000
+	c.market_wood_target = 15000
+	c.market_tool_target = 4000
+	c.market_grain_daily_supply = 700
+	c.market_wood_daily_supply = 2000
+	c.market_tool_daily_supply = 400
+	c.nation_start_treasury = 1000000
+	c.budget_granary = 150
+	c.budget_roads = 80
+	c.budget_guards = 120
+	c.budget_reserve = 50
+	c.caravan_capacity = 200
+	c.caravan_travel_days = 3
+	c.caravan_dispatch_interval_days = 3
+	c.caravan_transport_cost = 100
+	c.tariff_permille = 100
+	c.treaty_tariff_permille = 50
+	c.crisis_cooldown_days = 10
+	c.unrest_threshold = 70
+	c.price_spike_permille = 1500
+	c.shortage_grain_threshold = 10000
+	c.compute_derived_rates()
+	return c
+
+
 func is_g3() -> bool:
 	return profile == PROFILE_G3
 
 
+## G4a- und G4b-Profile teilen den 10k-Kern, die 2048er-Welt und die
+## Skalierungs-Pfade. G4b schaltet zusätzlich Wirtschaft/Politik ein.
 func is_scale() -> bool:
-	return profile == PROFILE_SCALE
+	return profile == PROFILE_SCALE or profile == PROFILE_CIVIC
+
+
+func is_civic() -> bool:
+	return profile == PROFILE_CIVIC
 
 
 ## G3 und das 10k-Profil teilen den saisonalen 120-Tage-Kalender und die
@@ -342,16 +429,21 @@ func uses_seasonal_calendar() -> bool:
 
 
 func uses_g3_schedule() -> bool:
-	return profile == PROFILE_G3 or profile == PROFILE_SCALE
+	return profile == PROFILE_G3 or profile == PROFILE_SCALE \
+		or profile == PROFILE_CIVIC
 
 
 func save_schema_version() -> int:
+	if profile == PROFILE_CIVIC:
+		return CIVIC_SCHEMA_VERSION
 	if profile == PROFILE_SCALE:
 		return SCALE_SCHEMA_VERSION
 	return G3_SCHEMA_VERSION if is_g3() else SCHEMA_VERSION
 
 
 func game_version_for_save() -> int:
+	if profile == PROFILE_CIVIC:
+		return CIVIC_GAME_VERSION
 	if profile == PROFILE_SCALE:
 		return SCALE_GAME_VERSION
 	return G3_GAME_VERSION if is_g3() else GAME_VERSION
@@ -499,4 +591,46 @@ func config_hash() -> int:
 		h = HashUtil.mix_i64(h, SCALE_TARGET_HOUSEHOLDS)
 		h = HashUtil.mix_i64(h, SCALE_FIELD_COUNT)
 		h = HashUtil.mix_i64(h, 1 if suppress_routine_events else 0)
+	elif profile == PROFILE_CIVIC:
+		h = HashUtil.mix_i64(h, CIVIC_SCHEMA_VERSION)
+		h = HashUtil.mix_i64(h, SCALE_TARGET_AGENTS)
+		h = HashUtil.mix_i64(h, SCALE_TARGET_HOUSEHOLDS)
+		h = HashUtil.mix_i64(h, SCALE_FIELD_COUNT)
+		h = HashUtil.mix_i64(h, 1 if suppress_routine_events else 0)
+		h = HashUtil.mix_i64(h, 1 if economy_enabled else 0)
+		h = HashUtil.mix_i64(h, 1 if politics_enabled else 0)
+		h = HashUtil.mix_i64(h, Goods.CONFIG_VERSION)
+		h = HashUtil.mix_i64(h, Goods.BASE_PRICE_MILLI[Goods.GRAIN])
+		h = HashUtil.mix_i64(h, Goods.BASE_PRICE_MILLI[Goods.WOOD])
+		h = HashUtil.mix_i64(h, Goods.BASE_PRICE_MILLI[Goods.TOOL])
+		h = HashUtil.mix_i64(h, tax_rate_permille)
+		h = HashUtil.mix_i64(h, wage_field)
+		h = HashUtil.mix_i64(h, wage_workshop)
+		h = HashUtil.mix_i64(h, wage_light)
+		h = HashUtil.mix_i64(h, household_start_money)
+		h = HashUtil.mix_i64(h, household_money_cap)
+		h = HashUtil.mix_i64(h, market_grain_start)
+		h = HashUtil.mix_i64(h, market_wood_start)
+		h = HashUtil.mix_i64(h, market_tool_start)
+		h = HashUtil.mix_i64(h, market_grain_target)
+		h = HashUtil.mix_i64(h, market_wood_target)
+		h = HashUtil.mix_i64(h, market_tool_target)
+		h = HashUtil.mix_i64(h, market_grain_daily_supply)
+		h = HashUtil.mix_i64(h, market_wood_daily_supply)
+		h = HashUtil.mix_i64(h, market_tool_daily_supply)
+		h = HashUtil.mix_i64(h, nation_start_treasury)
+		h = HashUtil.mix_i64(h, budget_granary)
+		h = HashUtil.mix_i64(h, budget_roads)
+		h = HashUtil.mix_i64(h, budget_guards)
+		h = HashUtil.mix_i64(h, budget_reserve)
+		h = HashUtil.mix_i64(h, caravan_capacity)
+		h = HashUtil.mix_i64(h, caravan_travel_days)
+		h = HashUtil.mix_i64(h, caravan_dispatch_interval_days)
+		h = HashUtil.mix_i64(h, caravan_transport_cost)
+		h = HashUtil.mix_i64(h, tariff_permille)
+		h = HashUtil.mix_i64(h, treaty_tariff_permille)
+		h = HashUtil.mix_i64(h, crisis_cooldown_days)
+		h = HashUtil.mix_i64(h, unrest_threshold)
+		h = HashUtil.mix_i64(h, price_spike_permille)
+		h = HashUtil.mix_i64(h, shortage_grain_threshold)
 	return h

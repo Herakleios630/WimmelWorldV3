@@ -45,6 +45,19 @@ const T_DEATH: int = 33
 const T_HOUSEHOLD_DISSOLVED: int = 34
 const T_HOUSEHOLD_REASSIGN: int = 35
 const T_HOUSEHOLD_WARD: int = 36
+# G4b: Wirtschaft/Politik/Handel. Neue Typen; G1-G4a erzeugen sie nicht.
+const T_MARKET_PRICE: int = 37
+const T_CARAVAN_DEPART: int = 38
+const T_CARAVAN_ARRIVE: int = 39
+const T_CARAVAN_RETURN: int = 40
+const T_TAX_CHANGE: int = 41
+const T_TREATY: int = 42
+const T_GIFT: int = 43
+const T_DIPLOMATIC_TENSION: int = 44
+const T_CRISIS_SHORTAGE: int = 45
+const T_CRISIS_PRICE: int = 46
+const T_CRISIS_DEBT: int = 47
+const T_CRISIS_UNREST: int = 48
 
 var id: int = 0
 var time: int = 0
@@ -107,6 +120,18 @@ static func type_name(t: int) -> String:
 		T_HOUSEHOLD_DISSOLVED: return "household_dissolved"
 		T_HOUSEHOLD_REASSIGN: return "household_reassign"
 		T_HOUSEHOLD_WARD: return "household_ward"
+		T_MARKET_PRICE: return "market_price"
+		T_CARAVAN_DEPART: return "caravan_depart"
+		T_CARAVAN_ARRIVE: return "caravan_arrive"
+		T_CARAVAN_RETURN: return "caravan_return"
+		T_TAX_CHANGE: return "tax_change"
+		T_TREATY: return "trade_treaty"
+		T_GIFT: return "diplomacy_gift"
+		T_DIPLOMATIC_TENSION: return "diplomatic_tension"
+		T_CRISIS_SHORTAGE: return "crisis_shortage"
+		T_CRISIS_PRICE: return "crisis_price"
+		T_CRISIS_DEBT: return "crisis_debt"
+		T_CRISIS_UNREST: return "crisis_unrest"
 		_: return "unknown"
 
 

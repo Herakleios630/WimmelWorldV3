@@ -221,6 +221,12 @@ func _causal_links(event: SimEvent, ce: ChronicleEvent) -> PackedInt32Array:
 			_append_cause(causes, "death:%d" % event.data)
 		SimEvent.T_HOUSEHOLD_REASSIGN, SimEvent.T_HOUSEHOLD_WARD:
 			_append_cause(causes, "household_dissolved:%d" % event.data)
+		SimEvent.T_CARAVAN_ARRIVE:
+			_append_cause(causes, "caravan_depart")
+		SimEvent.T_CARAVAN_RETURN:
+			_append_cause(causes, "caravan_arrive")
+		SimEvent.T_CRISIS_PRICE:
+			_append_cause(causes, "market_price")
 	return causes
 
 
@@ -258,6 +264,12 @@ func _update_latest(ce: ChronicleEvent) -> void:
 			latest["household_dissolved:%d" % ce.data] = ce.id
 		SimEvent.T_YEAR_SUMMARY:
 			latest["year_summary"] = ce.id
+		SimEvent.T_MARKET_PRICE:
+			latest["market_price"] = ce.id
+		SimEvent.T_CARAVAN_DEPART:
+			latest["caravan_depart"] = ce.id
+		SimEvent.T_CARAVAN_ARRIVE:
+			latest["caravan_arrive"] = ce.id
 
 
 func _rebuild_dedup_index() -> void:

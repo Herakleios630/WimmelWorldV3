@@ -1,7 +1,7 @@
 # WimmelWorld V3
 
-Status: **G4a bestanden (2026-11-14); G4b läuft (Wirtschaft/Politik).**  
-G0.5, G1, G2, B-Spike, G3 und G4a sind abgeschlossen.
+Status: **G4 abgeschlossen (2026-11-14); G5 bereit, Freigabe offen.**  
+G0.5, G1, G2, B-Spike, G3, G4a und G4b sind abgeschlossen.
 
 ## Was V3 ist
 
@@ -31,6 +31,7 @@ G0.5, G1, G2, B-Spike, G3 und G4a sind abgeschlossen.
 | `docs/g4/v3-g4-spec.md` | G4a/G4b: 10k-Kern und Systeme |
 | `docs/g4/v3-g4a-report.md` | G4a: 10k-Kern, Tests, Performance, Review |
 | `docs/g4/v3-g4b-spec.md` | G4b: Haushalte, Markt, Karawanen, Steuern, Diplomatie |
+| `docs/g4/v3-g4b-report.md` | G4b: Tests, Performance, Save Schema 8, Review |
 | `docs/v3-risk-register.md` | Risiken R1–R18, Auslöser, Gegenmaßnahmen |
 | `docs/v3-g0.5-spike.md` | Technikspike vor G1 (abgeschlossen) |
 | `docs/g0.5/v3-g0.5-results.md` | G0.5-Messwerte, C#-Vergleich, Portentscheid |

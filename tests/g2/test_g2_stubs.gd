@@ -53,12 +53,9 @@ static func _test_no_g3(ctx: G1aTestContext) -> void:
 	var config: SimConfig = SimConfig.g2(1337)
 	ctx.check_eq(config.target_agents, 100, "G2-Ziel ist nicht 100 Agenten")
 	ctx.check_eq(config.world_size, 384, "Weltgröße ist nicht 384")
-	for path in ["res://src/economy", "res://src/politics", "res://src/trade",
-			"res://src/caravan"]:
-		ctx.check(not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path(path)),
-			"G3/G4/G5-Modul vorhanden: " + path)
-	var g3_terms: Array = ["bookmark", "timeline", "caravan", "karawane",
-		"nation_id", "market_id", "tax_rate"]
+	# D-68: Spätere Gates (G4b economy/politics/trade/caravan) dürfen existieren.
+	# Die G2-Verhaltensprüfungen bleiben unverändert.
+	var g3_terms: Array = ["bookmark", "timeline"]
 	var src_files: Array = _recursive_gd("res://src")
 	var clean: bool = true
 	for path in src_files:

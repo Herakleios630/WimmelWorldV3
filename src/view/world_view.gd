@@ -164,12 +164,14 @@ func _draw() -> void:
 	if sim.config.is_scale() and view_state != null and view_state.zoom < 0.62:
 		if view_state.agents_visible:
 			_draw_agents()
+		_draw_caravans()
 		return
 	_draw_field_details()
 	_draw_buildings()
 	_draw_trees()
 	if view_state == null or view_state.agents_visible:
 		_draw_agents()
+	_draw_caravans()
 
 
 func _tile_rect(rect: Rect2i) -> Rect2:
@@ -343,6 +345,28 @@ func _hide_marker(row: int) -> void:
 		Transform2D(0.0, Vector2(-10000, -10000)))
 	if row < _marker_state.size():
 		_marker_state[row] = 0
+
+
+## G4b: wenige physische Karawanen als sichtbare Marker. Reine Darstellung,
+## keine Simulation-LOD und keine Zustandsänderung.
+func _draw_caravans() -> void:
+	if sim == null or sim.economy == null:
+		return
+	if view_state != null and not view_state.economy_visible:
+		return
+	var entries: Array = sim.economy.caravans.marker_entries(sim.clock.now, sim)
+	for entry_v in entries:
+		var entry: Dictionary = entry_v
+		var pos: Vector2 = (entry["position"] as Vector2) * TILE_PX
+		var good: int = int(entry["cargo_good"])
+		var color: Color = [Color(0.90, 0.78, 0.38), Color(0.62, 0.42, 0.24),
+			Color(0.64, 0.68, 0.72)][good if good >= 0 and good < Goods.COUNT else 0]
+		draw_rect(Rect2(pos + Vector2(-7, -5), Vector2(14, 10)), color)
+		draw_rect(Rect2(pos + Vector2(-7, -5), Vector2(14, 10)),
+			Color(0.16, 0.12, 0.08), false, 1.0)
+		draw_circle(pos + Vector2(7, 3), 2.5, Color(0.20, 0.16, 0.12))
+		draw_string(_font, pos + Vector2(-6, -9), "K%d" % int(entry["id"]),
+			HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(1.0, 0.94, 0.72))
 
 
 func _segment_bbox_touches(rect: Rect2, a: Vector2, b: Vector2) -> bool:

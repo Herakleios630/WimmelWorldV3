@@ -24,8 +24,10 @@ static func run(ctx: G1aTestContext) -> void:
 		"res://src/decisions/decision_system.gd")
 	ctx.check(not sim_text.to_lower().contains("d57"), "D57 im Simulationscode")
 	ctx.check(not dec_text.to_lower().contains("d57"), "D57 im Entscheidungscode")
-	# Keine G4-/Wirtschafts-/Politikmodule.
-	var forbidden_dirs: Array = ["economy", "politics", "trade", "caravan", "army"]
+	# Keine G4-/Wirtschafts-/Politikmodule. D-68: Ab G4b sind
+	# economy/politics/trade/caravan erlaubt; nur die Kriegs-Armee bleibt
+	# außerhalb des V3-Kerns.
+	var forbidden_dirs: Array = ["army"]
 	var dir_names: Array = []
 	for dir_name in DirAccess.get_directories_at("res://src"):
 		dir_names.append(dir_name.to_lower())
@@ -62,12 +64,8 @@ static func run(ctx: G1aTestContext) -> void:
 	ctx.check(too_long.is_empty(), "Datei > 1000 Zeilen: %s" % str(too_long))
 	ctx.check_eq(SimConfig.G3_SCHEMA_VERSION, 6, "Schema nicht 6")
 	ctx.check_eq(SimConfig.SCHEMA_VERSION, 5, "historisches Schema verändert")
-	# Keine G4-Feature-Namen in den G3-Kernklassen.
-	var core: String = FileAccess.get_file_as_string(
-		"res://src/data/sim_config.gd").to_lower()
-	ctx.check(not core.contains("g4"), "G4-Feature in SimConfig")
-	ctx.check(not core.contains("politik"), "Politik in SimConfig")
-	ctx.check(not core.contains("karawane"), "Karawanen in SimConfig")
+	# D-68: Die G3-Suite verbietet keine G4b-Fachbegriffe mehr in SimConfig.
+	# Die G3-eigenen Schema- und Verhaltensprüfungen bleiben unverändert.
 
 
 static func _gd_files(root: String) -> Array:

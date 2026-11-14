@@ -73,6 +73,8 @@ func _init(seed_value: int = 1, p_profile: int = SimConfig.PROFILE_G1,
 		size = p_size
 	elif profile == SimConfig.PROFILE_SCALE:
 		size = SimConfig.MAP_SIZE_SCALE
+	elif profile == SimConfig.PROFILE_CIVIC:
+		size = SimConfig.MAP_SIZE_SCALE
 	elif profile == SimConfig.PROFILE_G3:
 		size = SimConfig.MAP_SIZE_G3
 	elif profile == SimConfig.PROFILE_G2:
@@ -81,7 +83,8 @@ func _init(seed_value: int = 1, p_profile: int = SimConfig.PROFILE_G1,
 		size = SimConfig.MAP_SIZE
 	occupied.resize(size * size)
 	road.resize(size * size)
-	if profile == SimConfig.PROFILE_SCALE:
+	if profile == SimConfig.PROFILE_SCALE \
+			or profile == SimConfig.PROFILE_CIVIC:
 		_build_scale_settlement()
 	elif profile == SimConfig.PROFILE_G3:
 		_build_g3_settlement()
@@ -489,7 +492,8 @@ func _scatter_decor(seed_value: int) -> void:
 	elif profile == SimConfig.PROFILE_G3:
 		target_count = 700
 		guard_max = 40000
-	elif profile == SimConfig.PROFILE_SCALE:
+	elif profile == SimConfig.PROFILE_SCALE \
+			or profile == SimConfig.PROFILE_CIVIC:
 		target_count = 1200
 		guard_max = 120000
 	var placed: int = 0
@@ -507,7 +511,8 @@ func _scatter_decor(seed_value: int) -> void:
 			# Bebaute Siedlungsfläche freihalten; Bäume nur am Rand.
 			if x >= 40 and x <= 760 and y >= 40 and y <= 570:
 				continue
-		elif profile == SimConfig.PROFILE_SCALE:
+		elif profile == SimConfig.PROFILE_SCALE \
+				or profile == SimConfig.PROFILE_CIVIC:
 			if x >= 100 and x <= 1900 and y >= 100 and y <= 800:
 				continue
 		else:

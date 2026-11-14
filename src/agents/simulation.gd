@@ -23,6 +23,8 @@ var decisions: DecisionSystem
 var lifecycle: LifecycleSystem
 var pathfinder: PathFinder
 var batcher: EventBatcher
+var economy: EconomySystem
+var politics: PoliticsSystem
 
 var records: Array = []
 var households: Array = []
@@ -89,9 +91,13 @@ func setup_new(p_config: SimConfig) -> void:
 	decisions = DecisionSystem.new(self)
 	lifecycle = LifecycleSystem.new(self)
 	pathfinder = _make_pathfinder()
+	if config.economy_enabled:
+		politics = PoliticsSystem.new(config)
+		economy = EconomySystem.new(config)
 	if config.profile == SimConfig.PROFILE_G2 \
 			or config.profile == SimConfig.PROFILE_G3 \
-			or config.profile == SimConfig.PROFILE_SCALE:
+			or config.profile == SimConfig.PROFILE_SCALE \
+			or config.profile == SimConfig.PROFILE_CIVIC:
 		var generated: Dictionary = PopulationGenerator.generate(world, config)
 		records = generated["records"]
 		households = generated["households"]
@@ -168,8 +174,7 @@ func _spawn_initial_agents() -> void:
 
 func _make_pathfinder() -> PathFinder:
 	if config.profile != SimConfig.PROFILE_G2 \
-			and config.profile != SimConfig.PROFILE_G3 \
-			and config.profile != SimConfig.PROFILE_SCALE:
+			and not config.is_g3() and not config.is_scale():
 		return null
 	var defer_window: int = PathFinder.DEFER_WINDOW \
 		if config.uses_g3_schedule() else 1
@@ -183,7 +188,7 @@ func _make_pathfinder() -> PathFinder:
 func _prewarm_paths() -> void:
 	if pathfinder == null or decisions == null:
 		return
-	if config.profile == SimConfig.PROFILE_SCALE:
+	if config.is_scale():
 		_prewarm_paths_scale()
 		return
 	if config.profile == SimConfig.PROFILE_G3:
@@ -340,9 +345,15 @@ func _dispatch(kind: int, payload: int) -> void:
 		log_event(SimEvent.T_DAY_START, SimEvent.IMPORTANCE_ROUTINE,
 			0, "day_start", "Tag beginnt", day)
 		lifecycle.on_day_tick(day)
+		if economy != null:
+			economy.on_day_tick(day, self)
+		if politics != null:
+			politics.on_day_tick(day, self)
+		if economy != null:
+			economy.on_crisis_check(day, self)
 		if config.profile == SimConfig.PROFILE_G2 \
 				or config.profile == SimConfig.PROFILE_G3 \
-				or config.profile == SimConfig.PROFILE_SCALE:
+				or config.is_scale():
 			routes.compact(store)
 		if day > 0 and day % maxi(1, config.year_days) == 0:
 			_complete_year()
@@ -478,6 +489,10 @@ func state_hash() -> int:
 	h = HashUtil.mix_i64(h, last_year_meals_skipped)
 	h = HashUtil.mix_i64(h, last_year_harvests)
 	h = HashUtil.mix_i64(h, last_year_end_grain)
+	if economy != null:
+		h = HashUtil.mix(h, economy.state_hash())
+	if politics != null:
+		h = HashUtil.mix(h, politics.state_hash())
 	for record in records:
 		h = HashUtil.mix(h, (record as AgentRecord).state_hash())
 	for household in households:
@@ -523,6 +538,10 @@ func rebuild_runtime() -> void:
 	chronicle.ensure_agent_index()
 	if batcher == null:
 		batcher = EventBatcher.new()
+	if config.politics_enabled and politics == null:
+		politics = PoliticsSystem.new(config)
+	if config.economy_enabled and economy == null:
+		economy = EconomySystem.new(config)
 	decisions = DecisionSystem.new(self)
 	lifecycle = LifecycleSystem.new(self)
 	pathfinder = _make_pathfinder()

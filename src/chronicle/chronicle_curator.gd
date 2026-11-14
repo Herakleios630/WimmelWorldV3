@@ -11,13 +11,14 @@ const CAT_LIFE: String = "leben"
 const CAT_SOCIAL: String = "sozial"
 const CAT_WORK: String = "arbeit"
 const CAT_ECONOMY: String = "wirtschaft"
+const CAT_POLITICS: String = "politik"
 const CAT_CRISIS: String = "krise"
 const CAT_TRAVEL: String = "reise"
 const CAT_SYSTEM: String = "system"
 
 const ALL_CATEGORIES: Array = [
-	CAT_LIFE, CAT_SOCIAL, CAT_WORK, CAT_ECONOMY, CAT_CRISIS,
-	CAT_TRAVEL, CAT_SYSTEM,
+	CAT_LIFE, CAT_SOCIAL, CAT_WORK, CAT_ECONOMY, CAT_POLITICS,
+	CAT_CRISIS, CAT_TRAVEL, CAT_SYSTEM,
 ]
 
 ## Klassifikation ist typbasiert; ein Cache spart bei 1k die Dictionary-
@@ -143,6 +144,54 @@ static func _classify_uncached(event: SimEvent) -> Dictionary:
 		SimEvent.T_SAVE, SimEvent.T_LOAD:
 			category = CAT_SYSTEM
 			importance = SimEvent.IMPORTANCE_ROUTINE
+		SimEvent.T_MARKET_PRICE:
+			category = CAT_ECONOMY
+			importance = SimEvent.IMPORTANCE_NOTABLE
+			template = "market_price"
+		SimEvent.T_CARAVAN_DEPART:
+			category = CAT_TRAVEL
+			importance = SimEvent.IMPORTANCE_NOTABLE
+			template = "caravan_depart"
+		SimEvent.T_CARAVAN_ARRIVE:
+			category = CAT_TRAVEL
+			importance = SimEvent.IMPORTANCE_NOTABLE
+			template = "caravan_arrive"
+		SimEvent.T_CARAVAN_RETURN:
+			category = CAT_TRAVEL
+			importance = SimEvent.IMPORTANCE_NOTABLE
+			template = "caravan_return"
+		SimEvent.T_TAX_CHANGE:
+			category = CAT_POLITICS
+			importance = SimEvent.IMPORTANCE_NOTABLE
+			template = "tax_change"
+		SimEvent.T_TREATY:
+			category = CAT_POLITICS
+			importance = SimEvent.IMPORTANCE_HISTORIC
+			template = "trade_treaty"
+		SimEvent.T_GIFT:
+			category = CAT_POLITICS
+			importance = SimEvent.IMPORTANCE_NOTABLE
+			template = "diplomacy_gift"
+		SimEvent.T_DIPLOMATIC_TENSION:
+			category = CAT_POLITICS
+			importance = SimEvent.IMPORTANCE_NOTABLE
+			template = "diplomatic_tension"
+		SimEvent.T_CRISIS_SHORTAGE:
+			category = CAT_CRISIS
+			importance = SimEvent.IMPORTANCE_MAJOR
+			template = "crisis_shortage"
+		SimEvent.T_CRISIS_PRICE:
+			category = CAT_CRISIS
+			importance = SimEvent.IMPORTANCE_NOTABLE
+			template = "crisis_price"
+		SimEvent.T_CRISIS_DEBT:
+			category = CAT_CRISIS
+			importance = SimEvent.IMPORTANCE_MAJOR
+			template = "crisis_debt"
+		SimEvent.T_CRISIS_UNREST:
+			category = CAT_CRISIS
+			importance = SimEvent.IMPORTANCE_MAJOR
+			template = "crisis_unrest"
 	if template == "":
 		template = SimEvent.type_name(event.type)
 	return {
