@@ -4,6 +4,7 @@ extends Node2D
 ## House-Rows und Farmsteads sind echte 16x16-Prefabs. Reine Anzeige.
 ## 100 Lauf-Agenten sind Demo-Viewer (kein Sim-Eingriff).
 
+const EdgeTiles = preload("res://tests/g4c_p2/edge_tiles.gd")
 const TILE: int = 16
 const RP_PITCH: int = 17
 const BASE_PITCH: int = 64
@@ -64,6 +65,10 @@ var _dirt_tex: Texture2D
 var _cobble_tex: Texture2D
 var _water_tex: Texture2D
 var _sand_tex: Texture2D
+var _dirt_edges: Array = []
+var _cobble_edges: Array = []
+var _sand_edges: Array = []
+var _water_edges: Array = []
 var _house_tex: Dictionary = {}
 var _civic_tex: Dictionary = {}
 var _row_tex: Dictionary = {}
@@ -74,6 +79,7 @@ var _walkable: Dictionary = {}
 var _plaza_set: Dictionary = {}
 var _water_set: Dictionary = {}
 var _shore_set: Dictionary = {}
+var _shore_water_set: Dictionary = {}
 var _grass_avg: Color = Color(0.45, 0.50, 0.34)
 var _font: Font
 
@@ -89,6 +95,9 @@ func configure(p_layout: Dictionary, p_view_state: ViewState, seed_value: int) -
 		_water_set[t] = true
 	for t in (layout["pond"] as Dictionary).get("shore", []):
 		_shore_set[t] = true
+		_shore_water_set[t] = true
+	for t in (layout["pond"] as Dictionary).get("water", []):
+		_shore_water_set[t] = true
 	_build_assets()
 	_build_houses()
 	_build_prefabs()
@@ -168,6 +177,10 @@ func _build_assets() -> void:
 	_cobble_tex = _make_pattern(RP_COBBLE, 2, 2)
 	_water_tex = _make_pattern(RP_WATER, 2, 2)
 	_sand_tex = _make_pattern(RP_SAND, 2, 2)
+	_dirt_edges = EdgeTiles.build(_dirt_tex, 4, 4)
+	_cobble_edges = EdgeTiles.build(_cobble_tex, 4, 5)
+	_sand_edges = EdgeTiles.build(_sand_tex, 3, 4)
+	_water_edges = EdgeTiles.build(_water_tex, 4, 5)
 
 
 func _make_pattern(cell: Vector2i, w: int, h: int) -> Texture2D:
@@ -355,9 +368,7 @@ func _draw() -> void:
 	_draw_pond(vis)
 	_draw_roads(vis)
 	_draw_road_detail(vis)
-	_soften_shape(_walkable, vis, 4.2, true)
 	_draw_plaza(vis)
-	_soften_shape(_plaza_set, vis, 5.0, false, true)
 	_draw_fields(vis)
 	_draw_farm_yards(vis)
 	_draw_orchard(vis)
@@ -409,24 +420,30 @@ func _draw_ground(vis: Rect2) -> void:
 	draw_rect(_world_rect(), Color(0.08, 0.12, 0.08, 0.85), false, 3.0)
 
 
+func _mask4(tile: Vector2i, tiles: Dictionary) -> int:
+	var m: int = 0
+	if tiles.has(tile + Vector2i(0, -1)):
+		m |= 1
+	if tiles.has(tile + Vector2i(1, 0)):
+		m |= 2
+	if tiles.has(tile + Vector2i(0, 1)):
+		m |= 4
+	if tiles.has(tile + Vector2i(-1, 0)):
+		m |= 8
+	return m
+
+
 func _draw_roads(vis: Rect2) -> void:
-	var roads: Dictionary = layout["roads"]
-	var y0: int = maxi(0, int(vis.position.y))
-	var y1: int = mini(int(layout["size"]), int(vis.end.y) + 1)
-	for y in range(y0, y1):
-		var run_start: int = -1
-		var x0: int = maxi(0, int(vis.position.x) - 1)
-		var x1: int = mini(int(layout["size"]), int(vis.end.x) + 2)
-		for x in range(x0, x1 + 1):
-			var t: Vector2i = Vector2i(x, y)
-			var is_road: bool = roads.has(t)
-			if is_road and run_start < 0:
-				run_start = x
-			elif not is_road and run_start >= 0:
-				_draw_road_run(run_start, x, y)
-				run_start = -1
-		if run_start >= 0:
-			_draw_road_run(run_start, x1, y)
+	if _dirt_edges.is_empty():
+		return
+	for key in _walkable.keys():
+		var t: Vector2i = key
+		if _plaza_set.has(t) or not vis.has_point(Vector2(t)):
+			continue
+		var m: int = _mask4(t, _walkable)
+		draw_texture_rect(_dirt_edges[m],
+			Rect2(Vector2(t) * TILE, Vector2(TILE, TILE)), false,
+			Color(0.72, 0.60, 0.44))
 
 
 func _draw_road_run(xa: int, xb: int, y: int) -> void:
@@ -510,17 +527,18 @@ func _soften_shape(tiles: Dictionary, vis: Rect2, radius: float,
 func _draw_plaza(vis: Rect2) -> void:
 	var plaza: Dictionary = layout["plaza"]
 	var bounds: Rect2i = layout["plaza_rect"]
-	if not vis.intersects(bounds):
+	if not vis.intersects(bounds) or _cobble_edges.is_empty():
 		return
 	for t in plaza.keys():
 		var tile: Vector2i = t
 		if not vis.has_point(Vector2(tile)):
 			continue
 		var tint: float = float((tile.x * 7 + tile.y * 13) % 5) * 0.012
-		draw_texture_rect(_cobble_tex,
-			Rect2(Vector2(tile) * TILE, Vector2(TILE, TILE)), true,
+		var m: int = _mask4(tile, _plaza_set)
+		draw_texture_rect(_cobble_edges[m],
+			Rect2(Vector2(tile) * TILE, Vector2(TILE, TILE)), false,
 			Color(0.78 - tint, 0.73 - tint, 0.63 - tint))
-	# Vereinzelte Pflastersteine, Kante kommt aus _soften_shape().
+	# Vereinzelte Pflastersteine.
 	for t in plaza.keys():
 		var tile2: Vector2i = t
 		if not vis.has_point(Vector2(tile2)):
@@ -533,43 +551,24 @@ func _draw_plaza(vis: Rect2) -> void:
 
 func _draw_pond(vis: Rect2) -> void:
 	var pond: Dictionary = layout["pond"]
+	if _sand_edges.is_empty() or _water_edges.is_empty():
+		return
 	for t in pond.get("shore", []):
 		if vis.has_point(Vector2(t)):
-			draw_texture_rect(_sand_tex,
-				Rect2(Vector2(t) * TILE, Vector2(TILE, TILE)), true,
+			var ms: int = _mask4(t, _shore_water_set)
+			draw_texture_rect(_sand_edges[ms],
+				Rect2(Vector2(t) * TILE, Vector2(TILE, TILE)), false,
 				Color(0.86, 0.78, 0.62))
 	for t in pond.get("water", []):
 		if vis.has_point(Vector2(t)):
-			draw_texture_rect(_water_tex,
+			# Sandbasis unter dem Wasser; die Wasser-Kante deckt die Mitte ab.
+			draw_texture_rect(_sand_tex,
 				Rect2(Vector2(t) * TILE, Vector2(TILE, TILE)), true,
+				Color(0.86, 0.78, 0.62))
+			var mw: int = _mask4(t, _water_set)
+			draw_texture_rect(_water_edges[mw],
+				Rect2(Vector2(t) * TILE, Vector2(TILE, TILE)), false,
 				Color(0.64, 0.75, 0.79))
-	# Wasser<->Sand: weiche Sandnaht und gerundete Ecken statt Tile-Treppe.
-	var sand: Color = Color(0.82, 0.73, 0.55, 0.68)
-	for t in pond.get("water", []):
-		var tile: Vector2i = t
-		var p: Vector2 = Vector2(tile) * TILE
-		var n: bool = not _water_set.has(tile + Vector2i(0, -1))
-		var s: bool = not _water_set.has(tile + Vector2i(0, 1))
-		var w: bool = not _water_set.has(tile + Vector2i(-1, 0))
-		var e: bool = not _water_set.has(tile + Vector2i(1, 0))
-		if n:
-			draw_line(p + Vector2(0, 1.5), p + Vector2(TILE, 1.5), sand, 4.5)
-		if s:
-			draw_line(p + Vector2(0, TILE - 1.5), p + Vector2(TILE, TILE - 1.5),
-				sand, 4.5)
-		if w:
-			draw_line(p + Vector2(1.5, 0), p + Vector2(1.5, TILE), sand, 4.5)
-		if e:
-			draw_line(p + Vector2(TILE - 1.5, 0), p + Vector2(TILE - 1.5, TILE),
-				sand, 4.5)
-		if n and w:
-			draw_circle(p, 5.0, sand)
-		if n and e:
-			draw_circle(p + Vector2(TILE, 0), 5.0, sand)
-		if s and w:
-			draw_circle(p + Vector2(0, TILE), 5.0, sand)
-		if s and e:
-			draw_circle(p + Vector2(TILE, TILE), 5.0, sand)
 	# Schilf an der Wasserlinie.
 	for t in pond.get("water", []):
 		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
@@ -581,8 +580,6 @@ func _draw_pond(vis: Rect2) -> void:
 		if (int(t.x) * 7 + int(t.y) * 11) % 13 == 0:
 			var p3: Vector2 = Vector2(t) * TILE + Vector2(6, 13)
 			draw_line(p3, p3 + Vector2(1, -7), Color(0.30, 0.45, 0.20), 1.0)
-	# Sandufer gegen Gras weich auslaufen lassen.
-	_soften_shape(_shore_set, vis, 4.6, false)
 
 
 func _draw_fields(vis: Rect2) -> void:

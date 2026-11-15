@@ -143,7 +143,7 @@ func _refresh_hud() -> void:
 	var s: Dictionary = layout.get("summary", {})
 	var house_count: int = (layout["houses"] as Array).size()
 	var field_count: int = (layout["fields"] as Array).size()
-	_hud_labels[0].text = "G4c-P2.1c2b · %02d:%02d · Tag %d/120 · %s" % [
+	_hud_labels[0].text = "G4c-P2.1c2c · %02d:%02d · Tag %d/120 · %s" % [
 		hh, mm, day, SEASONS[season_index()]]
 	_hud_labels[1].text = "%d Agenten · %d Häuser · %d Feldparzellen · %d Bäume" % [
 		world_view.walkers.size(), house_count, field_count,
