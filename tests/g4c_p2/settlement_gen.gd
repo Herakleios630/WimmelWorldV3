@@ -11,15 +11,17 @@ const SEGMENTS_PATH: String = "res://tests/g4c_p2/segments.json"
 
 ## 8 versetzte House-Rows mit je 3 Haeusern -> 24 Haeuser. Die Hoehen/Abstaende
 ## sind bewusst unregelmaessig; die Reihen bleiben an Ring/Gassen angebunden.
+## Acht kurze Hauscluster (je 3 Haeuser) rund um den Platz. Kein Oval-Ring;
+## die Cluster werden ueber radiale Wege angebunden.
 const ROW_SLOTS: Array = [
-	{"x": 49, "y": 58, "wall": 0},
-	{"x": 69, "y": 57, "wall": 1},
-	{"x": 91, "y": 59, "wall": 2},
-	{"x": 109, "y": 58, "wall": 0},
-	{"x": 49, "y": 102, "wall": 1},
-	{"x": 69, "y": 101, "wall": 2},
-	{"x": 91, "y": 103, "wall": 0},
-	{"x": 111, "y": 101, "wall": 1},
+	{"x": 80, "y": 50, "wall": 0},
+	{"x": 112, "y": 58, "wall": 1},
+	{"x": 128, "y": 84, "wall": 2},
+	{"x": 112, "y": 110, "wall": 0},
+	{"x": 80, "y": 120, "wall": 1},
+	{"x": 48, "y": 110, "wall": 2},
+	{"x": 32, "y": 84, "wall": 0},
+	{"x": 48, "y": 58, "wall": 1},
 ]
 
 const FARMSTEAD_RECTS: Array = [
@@ -76,13 +78,11 @@ func generate(seed_value: int = 421337) -> Dictionary:
 		"wall_plan": [],
 	}
 	_stamp_plaza()
-	_stamp_ring_road()
-	_stamp_cross_streets()
-	_stamp_lanes()
-	_stamp_farm_roads()
-	_place_house_rows()
-	_place_fields()
 	_place_civic()
+	_place_house_rows()
+	_stamp_cluster_paths()
+	_stamp_farm_roads()
+	_place_fields()
 	_place_farmsteads()
 	_place_pond()
 	_place_orchards()
@@ -121,10 +121,47 @@ func _stamp_plaza() -> void:
 				layout["roads"][t] = 2
 
 
+func _stamp_cluster_paths() -> void:
+	var plaza: Rect2i = layout["plaza_rect"]
+	var pc: Vector2 = Vector2(plaza.position) + Vector2(plaza.size) * 0.5
+	for ri in (layout["house_rows"] as Array).size():
+		var row: Dictionary = layout["house_rows"][ri]
+		var rr: Rect2i = row["rect"]
+		var target: Vector2 = Vector2(
+			clampf(pc.x, float(rr.position.x), float(rr.position.x + rr.size.x - 1)),
+			clampf(pc.y, float(rr.position.y), float(rr.position.y + rr.size.y - 1)))
+		var start: Vector2 = Vector2(
+			clampf(target.x, float(plaza.position.x),
+				float(plaza.position.x + plaza.size.x - 1)),
+			clampf(target.y, float(plaza.position.y),
+				float(plaza.position.y + plaza.size.y - 1)))
+		_stamp_wavy_path(start, target, ri)
+
+
+func _stamp_wavy_path(a: Vector2, b: Vector2, salt: int) -> void:
+	var dist: float = a.distance_to(b)
+	if dist < 0.1:
+		return
+	var steps: int = maxi(2, int(dist))
+	var dir: Vector2 = (b - a).normalized()
+	var perp: Vector2 = Vector2(-dir.y, dir.x)
+	for i in steps + 1:
+		var t: float = float(i) / float(steps)
+		var p: Vector2 = a.lerp(b, t) \
+			+ perp * sin(t * PI * 2.6 + float(salt) * 0.73) * 1.4
+		var tile: Vector2i = Vector2i(int(round(p.x)), int(round(p.y)))
+		_stamp_road(tile)
+		var side: Vector2i = tile + Vector2i(0, 1)
+		if not _is_occupied(side):
+			_stamp_road(side)
+
+
 func _stamp_road(t: Vector2i, kind: int = 1) -> void:
 	if t.x < 3 or t.y < 3 or t.x >= WORLD_SIZE - 3 or t.y >= WORLD_SIZE - 3:
 		return
 	if (layout["plaza"] as Dictionary).has(t):
+		return
+	if _is_occupied(t):
 		return
 	layout["roads"][t] = kind
 

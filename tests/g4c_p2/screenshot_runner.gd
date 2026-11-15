@@ -1,6 +1,6 @@
 extends Node
 
-## Erzeugt die P2.1c2a-Screenshots aus der Demo. Nur Kamera/Zeit/HUD.
+## Erzeugt die P2.1c2b-Screenshots aus der Demo. Nur Kamera/Zeit/HUD.
 
 const OUT_DIR: String = "res://bench/results"
 
@@ -16,15 +16,15 @@ func _ready() -> void:
 	await get_tree().process_frame
 	demo.paused = true
 	demo.screenshot_mode = true
-	await _shot("g4c_p2c2a_overview.png", 1, 12.0 * 3600.0,
+	await _shot("g4c_p2c2b_overview.png", 1, 12.0 * 3600.0,
 		Vector2(88.0, 88.0), 0.46, true)
-	await _shot("g4c_p2c2a_plaza.png", 1, 10.5 * 3600.0,
+	await _shot("g4c_p2c2b_plaza.png", 1, 10.5 * 3600.0,
 		Vector2(88.0, 77.0), 1.85, true)
-	await _shot("g4c_p2c2a_roads.png", 1, 15.0 * 3600.0,
+	await _shot("g4c_p2c2b_roads.png", 1, 15.0 * 3600.0,
 		Vector2(100.0, 114.0), 2.0, true)
-	await _shot("g4c_p2c2a_pond.png", 1, 11.0 * 3600.0,
+	await _shot("g4c_p2c2b_pond.png", 1, 11.0 * 3600.0,
 		Vector2(20.0, 96.0), 1.8, true)
-	await _shot("g4c_p2c2a_fields.png", 1, 15.0 * 3600.0,
+	await _shot("g4c_p2c2b_fields.png", 1, 15.0 * 3600.0,
 		Vector2(47.0, 29.0), 2.1, true)
 	print("G4C_P2_SCREENSHOTS_DONE")
 	get_tree().quit(0)
