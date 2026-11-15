@@ -71,6 +71,10 @@ var _farm_tex: Dictionary = {}
 var _barn_tex: Texture2D
 var _base16_cache: Dictionary = {}
 var _walkable: Dictionary = {}
+var _plaza_set: Dictionary = {}
+var _water_set: Dictionary = {}
+var _shore_set: Dictionary = {}
+var _grass_avg: Color = Color(0.45, 0.50, 0.34)
 var _font: Font
 
 
@@ -80,6 +84,11 @@ func configure(p_layout: Dictionary, p_view_state: ViewState, seed_value: int) -
 	rng = RandomNumberGenerator.new()
 	rng.seed = seed_value
 	_walkable = layout["roads"]
+	_plaza_set = layout["plaza"]
+	for t in (layout["pond"] as Dictionary).get("water", []):
+		_water_set[t] = true
+	for t in (layout["pond"] as Dictionary).get("shore", []):
+		_shore_set[t] = true
 	_build_assets()
 	_build_houses()
 	_build_prefabs()
@@ -176,17 +185,34 @@ func _make_grass() -> Texture2D:
 		for x in 4:
 			_blit_pack(img, variants[(x + y * 3) % variants.size()],
 				x * TILE, y * TILE)
-	# Entsaettigtes Gras: dezente Grau-/Olivnote.
+	# Entsaettigtes Gras: dezente Grau-/Olivnote, feine Koernung statt Flaeche.
+	var sum: Color = Color(0, 0, 0)
 	for y in 64:
 		for x in 64:
 			var c: Color = img.get_pixel(x, y)
-			img.set_pixel(x, y, Color(c.r * 0.60 + 0.09, c.g * 0.66 + 0.09,
-				c.b * 0.52 + 0.08, 1.0))
+			var k: int = (x * 73856093 ^ y * 19349663) & 0x7fffffff
+			var d: float = 1.0 - (float(k % 29) / 29.0) * 0.075
+			var nc: Color = Color((c.r * 0.58 + 0.085) * d,
+				(c.g * 0.635 + 0.085) * d, (c.b * 0.50 + 0.075) * d, 1.0)
+			var luma: float = nc.r * 0.30 + nc.g * 0.59 + nc.b * 0.11
+			nc = nc.lerp(Color(luma * 0.95, luma, luma * 0.90), 0.14)
+			img.set_pixel(x, y, nc)
+			sum += nc
+	_grass_avg = Color(sum.r / 4096.0, sum.g / 4096.0, sum.b / 4096.0)
 	for i in 9:
 		var px: int = (i * 29) % 60 + 2
 		var py: int = (i * 47) % 60 + 2
-		img.set_pixel(px, py, Color(0.88, 0.84, 0.48) if i % 2 == 0
-			else Color(0.76, 0.52, 0.42))
+		img.set_pixel(px, py, Color(0.84, 0.80, 0.46) if i % 2 == 0
+			else Color(0.72, 0.50, 0.40))
+	# Weiche Moos-/Schattenflecken brechen die grosse Wiesenflaeche auf.
+	for i in 14:
+		var bx: int = (i * 37 + 11) % 58 + 2
+		var by: int = (i * 53 + 7) % 58 + 2
+		for yy in range(by, mini(64, by + 4)):
+			for xx in range(bx, mini(64, bx + 5)):
+				var pc: Color = img.get_pixel(xx, yy)
+				img.set_pixel(xx, yy, Color(pc.r * 0.93, pc.g * 0.94,
+					pc.b * 0.90, 1.0))
 	return ImageTexture.create_from_image(img)
 
 
@@ -276,6 +302,13 @@ func _compose_house(w: int, h: int, wall_i: int, roof_i: int,
 		for x in w:
 			_blit_base(img, roof_cell if y < roof_rows else wall_cell,
 				x * TILE, y * TILE, TILE, TILE)
+	# Waermere Daecher: dezenter Rot-/Gelbstich ueber der Dachzone.
+	for yy in roof_rows * TILE:
+		for xx in w * TILE:
+			var rc: Color = img.get_pixel(xx, yy)
+			if rc.a > 0.01:
+				img.set_pixel(xx, yy, Color(minf(1.0, rc.r * 1.07 + 0.02),
+					rc.g * 0.99, rc.b * 0.90, rc.a))
 	# Traufe, First, Ortgang: lesbare Hauskanten.
 	img.fill_rect(Rect2i(0, roof_rows * TILE - 3, w * TILE, 3),
 		Color(0.22, 0.14, 0.09, 1))
@@ -321,7 +354,10 @@ func _draw() -> void:
 	_draw_ground(vis)
 	_draw_pond(vis)
 	_draw_roads(vis)
+	_draw_road_detail(vis)
+	_soften_shape(_walkable, vis, 4.2, true)
 	_draw_plaza(vis)
+	_soften_shape(_plaza_set, vis, 5.0, false, true)
 	_draw_fields(vis)
 	_draw_farm_yards(vis)
 	_draw_orchard(vis)
@@ -397,12 +433,78 @@ func _draw_road_run(xa: int, xb: int, y: int) -> void:
 	if xb <= xa:
 		return
 	var r: Rect2 = Rect2(Vector2(xa * TILE, y * TILE), Vector2((xb - xa) * TILE, TILE))
-	draw_texture_rect(_dirt_tex, r, true, Color(0.80, 0.68, 0.53))
-	# Weiche, dunkle Wegraender: organischer als harte Rechtecke.
-	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.5)),
-		Color(0.28, 0.20, 0.12, 0.60))
-	draw_rect(Rect2(r.position + Vector2(0, r.size.y - 1.5),
-		Vector2(r.size.x, 1.5)), Color(0.28, 0.20, 0.12, 0.60))
+	# Dunklerer, waermerer Wegton; Kanten kommen aus der weichen Uebergangsschicht.
+	draw_texture_rect(_dirt_tex, r, true, Color(0.72, 0.60, 0.44))
+
+
+func _draw_road_detail(vis: Rect2) -> void:
+	var roads: Dictionary = _walkable
+	var rut: Color = Color(0.26, 0.19, 0.11, 0.20)
+	for key in roads.keys():
+		var t: Vector2i = key
+		if not vis.has_point(Vector2(t)) or _plaza_set.has(t):
+			continue
+		var p: Vector2 = Vector2(t) * TILE
+		var ew: bool = roads.has(t + Vector2i(-1, 0)) or roads.has(t + Vector2i(1, 0))
+		var ns: bool = roads.has(t + Vector2i(0, -1)) or roads.has(t + Vector2i(0, 1))
+		if ew and not ns:
+			draw_line(p + Vector2(0, 5.5), p + Vector2(TILE, 5.5), rut, 1.0)
+			draw_line(p + Vector2(0, 10.5), p + Vector2(TILE, 10.5), rut, 1.0)
+		elif ns and not ew:
+			draw_line(p + Vector2(5.5, 0), p + Vector2(5.5, TILE), rut, 1.0)
+			draw_line(p + Vector2(10.5, 0), p + Vector2(10.5, TILE), rut, 1.0)
+		var h: int = (t.x * 73856093 ^ t.y * 19349663) & 0x7fffffff
+		if h % 5 == 0:
+			var pebble: Vector2 = p + Vector2(3 + h % 10, 3 + (h / 11) % 10)
+			draw_circle(pebble, 1.4, Color(0.55, 0.46, 0.34, 0.75))
+
+
+## Weiche, gerundete Uebergangskante: breite transparente Grasnaht plus
+## Eckenrundung an konvexen Kanten. 4-Bit-Nachbarschaft statt harter Rect-Kanten.
+func _soften_shape(tiles: Dictionary, vis: Rect2, radius: float,
+		skip_plaza: bool, roads_block: bool = false) -> void:
+	var soft: Color = Color(_grass_avg.r, _grass_avg.g, _grass_avg.b, 0.42)
+	var hard: Color = Color(_grass_avg.r * 0.97, _grass_avg.g * 1.01,
+		_grass_avg.b * 0.95, 0.86)
+	var nw: Vector2i = Vector2i(0, -1)
+	var sw: Vector2i = Vector2i(0, 1)
+	var ww: Vector2i = Vector2i(-1, 0)
+	var ew: Vector2i = Vector2i(1, 0)
+	for key in tiles.keys():
+		var tile: Vector2i = key
+		if not vis.grow(1).has_point(Vector2(tile)):
+			continue
+		if skip_plaza and _plaza_set.has(tile):
+			continue
+		var p: Vector2 = Vector2(tile) * TILE
+		var n: bool = not tiles.has(tile + nw)
+		var s: bool = not tiles.has(tile + sw)
+		var w: bool = not tiles.has(tile + ww)
+		var e: bool = not tiles.has(tile + ew)
+		if roads_block:
+			# Wegdurchlaesse am Platzrand offen halten, nicht mit Gras zunaehen.
+			n = n and not _walkable.has(tile + nw)
+			s = s and not _walkable.has(tile + sw)
+			w = w and not _walkable.has(tile + ww)
+			e = e and not _walkable.has(tile + ew)
+		if n:
+			draw_line(p + Vector2(-0.5, 0.5), p + Vector2(TILE + 0.5, 0.5), soft, 5.0)
+		if s:
+			draw_line(p + Vector2(-0.5, TILE - 0.5),
+				p + Vector2(TILE + 0.5, TILE - 0.5), soft, 5.0)
+		if w:
+			draw_line(p + Vector2(0.5, -0.5), p + Vector2(0.5, TILE + 0.5), soft, 5.0)
+		if e:
+			draw_line(p + Vector2(TILE - 0.5, -0.5),
+				p + Vector2(TILE - 0.5, TILE + 0.5), soft, 5.0)
+		if n and w:
+			draw_circle(p, radius, hard)
+		if n and e:
+			draw_circle(p + Vector2(TILE, 0), radius, hard)
+		if s and w:
+			draw_circle(p + Vector2(0, TILE), radius, hard)
+		if s and e:
+			draw_circle(p + Vector2(TILE, TILE), radius, hard)
 
 
 func _draw_plaza(vis: Rect2) -> void:
@@ -417,28 +519,16 @@ func _draw_plaza(vis: Rect2) -> void:
 		var tint: float = float((tile.x * 7 + tile.y * 13) % 5) * 0.012
 		draw_texture_rect(_cobble_tex,
 			Rect2(Vector2(tile) * TILE, Vector2(TILE, TILE)), true,
-			Color(0.92 - tint, 0.89 - tint, 0.80 - tint))
-	# Randsteine als unregelmaessige Kante statt Slab-Rechteck.
+			Color(0.78 - tint, 0.73 - tint, 0.63 - tint))
+	# Vereinzelte Pflastersteine, Kante kommt aus _soften_shape().
 	for t in plaza.keys():
 		var tile2: Vector2i = t
 		if not vis.has_point(Vector2(tile2)):
 			continue
-		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1),
-				Vector2i(0, -1)]:
-			if not plaza.has(tile2 + d):
-				var p: Vector2 = Vector2(tile2) * TILE
-				if d.x != 0:
-					var lx: float = p.x + (TILE if d.x > 0 else 0)
-					draw_line(Vector2(lx, p.y), Vector2(lx, p.y + TILE),
-						Color(0.30, 0.26, 0.20), 1.5)
-				else:
-					var ly: float = p.y + (TILE if d.y > 0 else 0)
-					draw_line(Vector2(p.x, ly), Vector2(p.x + TILE, ly),
-						Color(0.30, 0.26, 0.20), 1.5)
 		for i in 2:
 			var px: float = float(tile2.x * TILE) + float((i * 5 + tile2.y) % 10)
 			var py: float = float(tile2.y * TILE) + float((i * 7 + tile2.x) % 10)
-			draw_rect(Rect2(px, py, 4, 3), Color(0.58, 0.56, 0.48, 0.8))
+			draw_rect(Rect2(px, py, 4, 3), Color(0.56, 0.52, 0.43, 0.75))
 
 
 func _draw_pond(vis: Rect2) -> void:
@@ -447,23 +537,52 @@ func _draw_pond(vis: Rect2) -> void:
 		if vis.has_point(Vector2(t)):
 			draw_texture_rect(_sand_tex,
 				Rect2(Vector2(t) * TILE, Vector2(TILE, TILE)), true,
-				Color(0.92, 0.84, 0.66))
+				Color(0.86, 0.78, 0.62))
 	for t in pond.get("water", []):
 		if vis.has_point(Vector2(t)):
 			draw_texture_rect(_water_tex,
 				Rect2(Vector2(t) * TILE, Vector2(TILE, TILE)), true,
-				Color(0.80, 0.90, 0.96))
-	# Uferkante und Schilf.
+				Color(0.64, 0.75, 0.79))
+	# Wasser<->Sand: weiche Sandnaht und gerundete Ecken statt Tile-Treppe.
+	var sand: Color = Color(0.82, 0.73, 0.55, 0.68)
+	for t in pond.get("water", []):
+		var tile: Vector2i = t
+		var p: Vector2 = Vector2(tile) * TILE
+		var n: bool = not _water_set.has(tile + Vector2i(0, -1))
+		var s: bool = not _water_set.has(tile + Vector2i(0, 1))
+		var w: bool = not _water_set.has(tile + Vector2i(-1, 0))
+		var e: bool = not _water_set.has(tile + Vector2i(1, 0))
+		if n:
+			draw_line(p + Vector2(0, 1.5), p + Vector2(TILE, 1.5), sand, 4.5)
+		if s:
+			draw_line(p + Vector2(0, TILE - 1.5), p + Vector2(TILE, TILE - 1.5),
+				sand, 4.5)
+		if w:
+			draw_line(p + Vector2(1.5, 0), p + Vector2(1.5, TILE), sand, 4.5)
+		if e:
+			draw_line(p + Vector2(TILE - 1.5, 0), p + Vector2(TILE - 1.5, TILE),
+				sand, 4.5)
+		if n and w:
+			draw_circle(p, 5.0, sand)
+		if n and e:
+			draw_circle(p + Vector2(TILE, 0), 5.0, sand)
+		if s and w:
+			draw_circle(p + Vector2(0, TILE), 5.0, sand)
+		if s and e:
+			draw_circle(p + Vector2(TILE, TILE), 5.0, sand)
+	# Schilf an der Wasserlinie.
 	for t in pond.get("water", []):
 		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			if not (pond["water"] as Array).has(t + d):
-				var p: Vector2 = Vector2(t) * TILE
-				draw_line(p + Vector2(0, 6), p + Vector2(TILE, 6),
-					Color(0.20, 0.34, 0.28, 0.65), 1.5)
+			if not _water_set.has(t + d):
+				var p2: Vector2 = Vector2(t) * TILE
+				draw_line(p2 + Vector2(0, 6), p2 + Vector2(TILE, 6),
+					Color(0.20, 0.34, 0.28, 0.55), 1.5)
 	for t in pond.get("shore", []):
 		if (int(t.x) * 7 + int(t.y) * 11) % 13 == 0:
-			var p: Vector2 = Vector2(t) * TILE + Vector2(6, 13)
-			draw_line(p, p + Vector2(1, -7), Color(0.30, 0.45, 0.20), 1.0)
+			var p3: Vector2 = Vector2(t) * TILE + Vector2(6, 13)
+			draw_line(p3, p3 + Vector2(1, -7), Color(0.30, 0.45, 0.20), 1.0)
+	# Sandufer gegen Gras weich auslaufen lassen.
+	_soften_shape(_shore_set, vis, 4.6, false)
 
 
 func _draw_fields(vis: Rect2) -> void:
@@ -496,10 +615,23 @@ func _draw_fields(vis: Rect2) -> void:
 				var fx: float = r.position.x + 6.0 + fmod(float(i) * 19.0, r.size.x - 12.0)
 				var fy: float = r.position.y + 6.0 + fmod(float(i) * 13.0, r.size.y - 12.0)
 				draw_rect(Rect2(fx, fy, 2, 4), Color(0.80, 0.72, 0.30))
-		draw_rect(r, Color(0.24, 0.18, 0.10), false, 2.0)
-		# Ackerrain: schmaler, warmer Erdstreifen um die Parzelle.
-		draw_rect(Rect2(r.position - Vector2(3, 3), r.size + Vector2(6, 6)),
-			Color(0.35, 0.25, 0.15, 0.35), false, 3.0)
+		# Weicher Ackerrain statt harter Rechteckkontur.
+		draw_rect(Rect2(r.position + Vector2(1, 1), r.size - Vector2(2, 2)),
+			Color(0.24, 0.18, 0.10, 0.45), false, 1.5)
+		# Grasnaht entlang der Feldkanten und gerundete Ecken zuletzt.
+		var edge: Color = Color(_grass_avg.r, _grass_avg.g, _grass_avg.b, 0.48)
+		draw_line(r.position + Vector2(0, 1.0),
+			Vector2(r.end.x, r.position.y + 1.0), edge, 3.0)
+		draw_line(Vector2(r.position.x, r.end.y - 1.0),
+			r.end - Vector2(0, 1.0), edge, 3.0)
+		draw_line(r.position + Vector2(1.0, 0),
+			Vector2(r.position.x + 1.0, r.end.y), edge, 3.0)
+		draw_line(Vector2(r.end.x - 1.0, r.position.y),
+			r.end - Vector2(1.0, 0), edge, 3.0)
+		var gr: Color = Color(_grass_avg.r, _grass_avg.g, _grass_avg.b, 0.95)
+		for corner in [r.position, Vector2(r.end.x, r.position.y),
+				Vector2(r.position.x, r.end.y), r.end]:
+			draw_circle(corner, 8.0, gr)
 		if bool(f.get("hedge", false)):
 			_draw_hedge(rect)
 		if bool(f.get("fence", false)):
@@ -561,7 +693,19 @@ func _draw_farm_yards(vis: Rect2) -> void:
 			else:
 				draw_circle(Vector2(sx + 3, sy + 2), 3.0,
 					Color(0.34, 0.28, 0.20, 0.55))
-		draw_rect(r, Color(0.30, 0.22, 0.13, 0.9), false, 2.0)
+		var edge: Color = Color(_grass_avg.r, _grass_avg.g, _grass_avg.b, 0.45)
+		draw_line(r.position + Vector2(0, 1.0),
+			Vector2(r.end.x, r.position.y + 1.0), edge, 3.0)
+		draw_line(Vector2(r.position.x, r.end.y - 1.0),
+			r.end - Vector2(0, 1.0), edge, 3.0)
+		draw_line(r.position + Vector2(1.0, 0),
+			Vector2(r.position.x + 1.0, r.end.y), edge, 3.0)
+		draw_line(Vector2(r.end.x - 1.0, r.position.y),
+			r.end - Vector2(1.0, 0), edge, 3.0)
+		var gr: Color = Color(_grass_avg.r, _grass_avg.g, _grass_avg.b, 0.90)
+		for corner in [r.position, Vector2(r.end.x, r.position.y),
+				Vector2(r.position.x, r.end.y), r.end]:
+			draw_circle(corner, 7.0, gr)
 		# Hofzaun an den Seiten und mit Durchlass zur Hofzufahrt.
 		var fy: float = r.end.y + 2.0
 		var x: float = r.position.x
@@ -655,8 +799,12 @@ func _draw_row(ri: int) -> void:
 	var garden: Rect2i = row["garden"]
 	if garden.size.x > 0:
 		_draw_garden(garden)
-	draw_rect(Rect2(r.position + Vector2(4, 6), Vector2(r.size.x, 8 * TILE)),
-		Color(0.05, 0.05, 0.04, 0.22))
+	for h in row["houses"]:
+		var hr: Rect2 = _tile_rect(h["rect"])
+		for si in 5:
+			var sx: float = hr.position.x + 5.0 + float(si) * (hr.size.x - 10.0) / 4.0
+			draw_circle(Vector2(sx, hr.end.y - 2.0), 8.0,
+				Color(0.05, 0.05, 0.04, 0.16))
 	draw_texture_rect(tex, r, false)
 	_draw_row_fence(row)
 	for h in row["houses"]:
@@ -694,10 +842,13 @@ func _draw_farmstead(fi: int) -> void:
 	var tex: Texture2D = _farm_tex.get(fi)
 	if tex == null:
 		return
-	draw_rect(Rect2(Vector2(rect.position) * TILE + Vector2(5, 6),
-		Vector2(rect.size) * TILE - Vector2(0, 10)), Color(0.05, 0.05, 0.04, 0.20))
-	draw_texture_rect(tex, _tile_rect(rect), false)
 	var h_rect: Rect2i = fs["house_rect"]
+	for si in 4:
+		var hrr: Rect2 = _tile_rect(h_rect)
+		draw_circle(Vector2(hrr.position.x + 6.0 + float(si)
+			* (hrr.size.x - 12.0) / 3.0, hrr.end.y - 2.0), 8.0,
+			Color(0.05, 0.05, 0.04, 0.16))
+	draw_texture_rect(tex, _tile_rect(rect), false)
 	_draw_window_glow(_tile_rect(h_rect), h_rect, night_factor * 0.8)
 	# Scheunentor-Rahmen als lesbares Farm-Detail.
 	var b_rect: Rect2i = fs["barn_rect"]
@@ -730,6 +881,12 @@ func _draw_garden(garden: Rect2i) -> void:
 		draw_line(Vector2(x, fy), Vector2(x, fy - 6),
 			Color(0.42, 0.30, 0.17), 1.2)
 		x += 8.0
+	var gr: Color = Color(_grass_avg.r, _grass_avg.g, _grass_avg.b, 0.85)
+	for corner in [Vector2(r.position.x, r.end.y), r.end]:
+		draw_circle(corner, 5.0, gr)
+	var edge: Color = Color(_grass_avg.r, _grass_avg.g, _grass_avg.b, 0.40)
+	draw_line(Vector2(r.position.x, r.end.y - 1.0),
+		Vector2(r.end.x, r.end.y - 1.0), edge, 3.0)
 
 
 func _draw_window_glow(r: Rect2, rect: Rect2i, nf: float) -> void:

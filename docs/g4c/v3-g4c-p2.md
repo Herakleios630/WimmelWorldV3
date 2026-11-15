@@ -103,3 +103,12 @@ Segmente (jeweils 16×16 Tiles oder Vielfache, mit Ports):
 - Keine Tiny-Farm/Town/Dungeon-/Medieval-RTS-Assets.
 - Keine Änderung an G0-Dokumenten/README/Master-Plan.
 - Keine Git-Commits ohne Review; P2-Checkpoints separat.
+
+## 8. P2.1c1 — Rounded Transitions, Palette, Wege
+
+- Eigene Uebergangs-/Rundungsschicht aus den CC0-Tiles: Gras<->Dirt<->Weg<->Wasser<->Pflaster, 4-Bit-Kanten und abgerundete Ecken (2-4 px).
+- Platz als unregelmaessige Ellipse/Polynom mit weichem Gras-/Dirt-Rand statt Rechteck.
+- Wege 1-2 Tiles, runde Enden/Ecken, Grasraender, leichte Rillen.
+- Teich mit runder/irregulaerer Form und Sand-/Grasufer.
+- Palette: Gras leicht entsaettigen, Grassvariation/Bueschel, Daecher waermer, Wege dunkler.
+- Kein Layout-Umbau (der kommt in P2.1c2); Timebox 30 min, keine Suiten.
