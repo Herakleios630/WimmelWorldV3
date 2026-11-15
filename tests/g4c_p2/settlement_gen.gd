@@ -9,13 +9,17 @@ const WORLD_SIZE: int = 176
 const CENTER: Vector2i = Vector2i(88, 88)
 const SEGMENTS_PATH: String = "res://tests/g4c_p2/segments.json"
 
-## 8 House-Rows a 16x16, je 3 Haeuser -> 24 Haeuser. Nordreihen oeffnen zum
-## Platz, Suedreihen zur Suedgasse.
+## 8 versetzte House-Rows mit je 3 Haeusern -> 24 Haeuser. Die Hoehen/Abstaende
+## sind bewusst unregelmaessig; die Reihen bleiben an Ring/Gassen angebunden.
 const ROW_SLOTS: Array = [
-	{"x": 50, "y": 58, "wall": 0}, {"x": 68, "y": 57, "wall": 1},
-	{"x": 92, "y": 58, "wall": 2}, {"x": 108, "y": 58, "wall": 0},
-	{"x": 50, "y": 102, "wall": 1}, {"x": 68, "y": 101, "wall": 2},
-	{"x": 92, "y": 102, "wall": 0}, {"x": 110, "y": 101, "wall": 1},
+	{"x": 49, "y": 58, "wall": 0},
+	{"x": 69, "y": 57, "wall": 1},
+	{"x": 91, "y": 59, "wall": 2},
+	{"x": 109, "y": 58, "wall": 0},
+	{"x": 49, "y": 102, "wall": 1},
+	{"x": 69, "y": 101, "wall": 2},
+	{"x": 91, "y": 103, "wall": 0},
+	{"x": 111, "y": 101, "wall": 1},
 ]
 
 const FARMSTEAD_RECTS: Array = [
@@ -57,7 +61,7 @@ func generate(seed_value: int = 421337) -> Dictionary:
 		"day_length": 120,
 		"roads": {},
 		"plaza": {},
-		"plaza_rect": Rect2i(80, 82, 16, 12),
+		"plaza_rect": Rect2i(81, 83, 14, 10),
 		"houses": [],
 		"house_rows": [],
 		"fields": [],
@@ -136,7 +140,11 @@ func _stamp_ring_road() -> void:
 			var wob: float = sin(a * 3.0 + 1.3) * 2.4 + sin(a * 5.0 + 0.7) * 1.2
 			var d: float = sqrt((dx / (rx + wob)) * (dx / (rx + wob))
 				+ (dy / (ry + wob)) * (dy / (ry + wob)))
-			if d >= 0.975 and d <= 1.026:
+			# Drei unregelmaessige Luecken brechen den perfekten Oval-Ring auf.
+			var gap: bool = (a > 0.55 and a < 0.85) \
+				or (a > 2.45 and a < 2.75) \
+				or (a > -2.55 and a < -2.25)
+			if not gap and d >= 0.975 and d <= 1.026:
 				_stamp_road(Vector2i(x, y))
 
 
@@ -205,9 +213,10 @@ func _place_house_rows() -> void:
 			continue
 		_occupy_rect(row_rect, true)
 		var wall: int = int(slot["wall"])
+		var count: int = int(slot.get("count", 3))
 		var houses: Array = []
 		var doors: Array = []
-		for hi in 3:
+		for hi in count:
 			var variant: int = wall * 3 + (ri + hi) % 3
 			var wh: Array = _house_size(variant)
 			var h_rect: Rect2i = Rect2i(row_rect.position.x + hi * 5,

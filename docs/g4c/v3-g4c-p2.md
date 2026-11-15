@@ -112,3 +112,18 @@ Segmente (jeweils 16×16 Tiles oder Vielfache, mit Ports):
 - Teich mit runder/irregulaerer Form und Sand-/Grasufer.
 - Palette: Gras leicht entsaettigen, Grassvariation/Bueschel, Daecher waermer, Wege dunkler.
 - Kein Layout-Umbau (der kommt in P2.1c2); Timebox 30 min, keine Suiten.
+
+## 9. P2.1c2a — Organische Auflockerung
+
+- Perfekten Oval-Ring in 3-4 unregelmäßige Ringbögen/Cluster aufbrechen; Radien/Lücken variieren.
+- 24 Häuser: Zeilenlängen 2-4, Vor-/Rücksprünge, Gassen, fehlende Ecken/Gärten; keine langen Einheitsblöcke.
+- Leere Grasflächen mit Gärten, Obstgärten, Schuppen, Holzstapeln, Zäunen, Karren, Bänken füllen.
+- Platz kleiner/unregelmäßiger; Häuser näher heran; Markt/Brunnen behalten.
+- 3 Höfe/6 Felder am Rand, alle im Übersichtsbild; Hecken/Wege integrieren.
+- Kein Tile-Edge-Rewrite (P2.1c2b), Timebox 30 min, keine Suiten.
+
+## 10. P2.1c2b — Richtige Edge-/Corner-Tiles
+
+- Ersatz der Soft-Blob-Kanten durch ein kuratiertes 4-Bit-Set (16 Varianten) für Gras<->Dirt/Weg/Pflaster/Wasser; keine 47er-Blob-Bibliothek.
+- Feste 16x16-Kanten/Ecken, crispe Pixel, klare Übergänge; Wege/Platz/Teich/Feldränder.
+- Danach Screenshots und Vergleich mit P2.1c1.
