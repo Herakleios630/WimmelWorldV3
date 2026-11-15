@@ -46,7 +46,7 @@ static func generate(world: WorldMap, config: SimConfig) -> Dictionary:
 		next_id += 1
 		head_ids.append(head_id)
 		_add_record(records, head_id, head_sex, head_age, household_id,
-			home_id, rng, h)
+			home_id, rng, h, config.year_days)
 		members.append(head_id)
 		var partner_id: int = 0
 		if h < partners:
@@ -56,7 +56,7 @@ static func generate(world: WorldMap, config: SimConfig) -> Dictionary:
 			var partner_age: int = 24 + rng.next_range(28)
 			partner_ids.append(partner_id)
 			_add_record(records, partner_id, partner_sex, partner_age,
-				household_id, home_id, rng, h + 31)
+				household_id, home_id, rng, h + 31, config.year_days)
 			members.append(partner_id)
 			_append_rel(relationships, next_rel, RelationshipRecord.TYPE_PARTNER,
 				head_id, partner_id, 80, 0)
@@ -81,7 +81,7 @@ static func generate(world: WorldMap, config: SimConfig) -> Dictionary:
 		var household_id: int = h + 1
 		var home_id: int = house_ids[h % house_ids.size()]
 		_add_record(records, child_id, child_sex, child_age, household_id,
-			home_id, rng, h + 61)
+			home_id, rng, h + 61, config.year_days)
 		child_ids_by_house[h].append(child_id)
 		var household: HouseholdRecord = households[h]
 		household.member_ids = _insert_sorted(household.member_ids, child_id)
@@ -111,7 +111,7 @@ static func generate(world: WorldMap, config: SimConfig) -> Dictionary:
 		var household_id: int = h + 1
 		var home_id: int = house_ids[h % house_ids.size()]
 		_add_record(records, elder_id, elder_sex, elder_age, household_id,
-			home_id, rng, h + 97)
+			home_id, rng, h + 97, config.year_days)
 		elder_ids_by_house[h].append(elder_id)
 		var household2: HouseholdRecord = households[h]
 		household2.member_ids = _insert_sorted(household2.member_ids, elder_id)
@@ -485,7 +485,8 @@ static func _add_g3_record(records: Array, agent_id: int, sex: int, age: int,
 
 
 static func _add_record(records: Array, agent_id: int, sex: int, age: int,
-		household_id: int, home_id: int, rng: RngStream, salt: int) -> void:
+		household_id: int, home_id: int, rng: RngStream, salt: int,
+		year_days: int = SimConfig.YEAR_DAYS) -> void:
 	var role: int = LifecycleRules.role_for_age(age)
 	var job_id: int = 0
 	var job_kind: int = AgentStore.JOB_NONE
@@ -512,7 +513,8 @@ static func _add_record(records: Array, agent_id: int, sex: int, age: int,
 	var names: Array = LifecycleRules.FEMALE_NAMES if sex == LifecycleRules.SEX_FEMALE \
 		else LifecycleRules.MALE_NAMES
 	var name: String = str(names[(agent_id * 7 + salt) % names.size()])
-	var birth_day: int = -age * SimConfig.YEAR_DAYS - rng.next_range(SimConfig.YEAR_DAYS)
+	var safe_year: int = maxi(1, year_days)
+	var birth_day: int = -age * safe_year - rng.next_range(safe_year)
 	records.append(AgentRecord.new(agent_id, name, sex, age, role,
 		household_id, home_id, job_id, job_kind, birth_day))
 

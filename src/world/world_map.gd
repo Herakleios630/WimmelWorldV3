@@ -39,6 +39,8 @@ var buildings: Array = []
 var nodes: Array = []
 var adjacency: Array = []
 var decor_trees: PackedVector2Array = PackedVector2Array()
+# Nur G4c-P-Pretest: dekoratives Wasser, das als Hindernis markiert ist.
+var water_rects: Array = []
 
 var field_work_point: Vector2 = Vector2.ZERO
 var plaza_point: Vector2 = Vector2.ZERO
@@ -77,7 +79,7 @@ func _init(seed_value: int = 1, p_profile: int = SimConfig.PROFILE_G1,
 		size = SimConfig.MAP_SIZE_SCALE
 	elif profile == SimConfig.PROFILE_G3:
 		size = SimConfig.MAP_SIZE_G3
-	elif profile == SimConfig.PROFILE_G2:
+	elif profile == SimConfig.PROFILE_G2 or profile == SimConfig.PROFILE_G4C_P:
 		size = SimConfig.MAP_SIZE_G2
 	else:
 		size = SimConfig.MAP_SIZE
@@ -88,13 +90,16 @@ func _init(seed_value: int = 1, p_profile: int = SimConfig.PROFILE_G1,
 		_build_scale_settlement()
 	elif profile == SimConfig.PROFILE_G3:
 		_build_g3_settlement()
-	elif profile == SimConfig.PROFILE_G2:
+	elif profile == SimConfig.PROFILE_G2 or profile == SimConfig.PROFILE_G4C_P:
 		_build_g2_settlement()
 	else:
 		_build_buildings()
 		_build_roads()
 		_build_graph()
 	_rebuild_lookup_indices()
+	if profile == SimConfig.PROFILE_G4C_P:
+		_reset_g4c_preview_fields()
+		_add_g4c_preview_pond()
 	_build_chunk_index()
 	_scatter_decor(seed_value)
 
@@ -214,6 +219,30 @@ func _build_g2_settlement() -> void:
 		field3.field_stage = Building.FIELD_RIPE
 	field_work_point = _field_work_points[0]
 	plaza_point = Vector2(196.5, 165.5)
+
+
+## G4c-P startet am 1. Fr?hling mit vier unbebauten Feldern. Die G2-Welt
+## staffelt ihre Felder fuer den 30-Tage-Zyklus vor; fuer den saisonalen
+## Pretest waere das ein zweiter (unbezahlter) Satz im selben Jahr.
+func _reset_g4c_preview_fields() -> void:
+	for field_id in _field_ids:
+		var field: Building = building_by_id(field_id)
+		if field == null:
+			continue
+		field.field_stage = Building.FIELD_FALLOW
+		field.field_work_s = 0
+		field.field_growth_end = 0
+		field.field_growth_gen = 0
+		field.field_crop_year = -1
+		field.field_harvested_year = -1
+		field.field_last_shortage_day = -1
+
+
+func _add_g4c_preview_pond() -> void:
+	water_rects.append(Rect2i(44, 272, 32, 26))
+	for y in range(272, 298):
+		for x in range(44, 76):
+			occupied[_idx(x, y)] = 1
 
 
 func _build_g3_settlement() -> void:
@@ -486,7 +515,7 @@ func _scatter_decor(seed_value: int) -> void:
 	var rng: RngStream = RngStream.new(seed_value * 17 + 31)
 	var target_count: int = 180
 	var guard_max: int = 4000
-	if profile == SimConfig.PROFILE_G2:
+	if profile == SimConfig.PROFILE_G2 or profile == SimConfig.PROFILE_G4C_P:
 		target_count = 260
 		guard_max = 12000
 	elif profile == SimConfig.PROFILE_G3:
@@ -504,7 +533,7 @@ func _scatter_decor(seed_value: int) -> void:
 		var y: int = 2 + rng.next_range(size - 4)
 		if road[_idx(x, y)] != 0 or occupied[_idx(x, y)] != 0:
 			continue
-		if profile == SimConfig.PROFILE_G2:
+		if profile == SimConfig.PROFILE_G2 or profile == SimConfig.PROFILE_G4C_P:
 			if x >= 80 and x <= 326 and y >= 86 and y <= 250:
 				continue
 		elif profile == SimConfig.PROFILE_G3:

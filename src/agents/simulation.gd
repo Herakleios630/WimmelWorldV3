@@ -94,10 +94,7 @@ func setup_new(p_config: SimConfig) -> void:
 	if config.economy_enabled:
 		politics = PoliticsSystem.new(config)
 		economy = EconomySystem.new(config)
-	if config.profile == SimConfig.PROFILE_G2 \
-			or config.profile == SimConfig.PROFILE_G3 \
-			or config.profile == SimConfig.PROFILE_SCALE \
-			or config.profile == SimConfig.PROFILE_CIVIC:
+	if config.uses_pathfinder():
 		var generated: Dictionary = PopulationGenerator.generate(world, config)
 		records = generated["records"]
 		households = generated["households"]
@@ -173,8 +170,7 @@ func _spawn_initial_agents() -> void:
 
 
 func _make_pathfinder() -> PathFinder:
-	if config.profile != SimConfig.PROFILE_G2 \
-			and not config.is_g3() and not config.is_scale():
+	if not config.uses_pathfinder():
 		return null
 	var defer_window: int = PathFinder.DEFER_WINDOW \
 		if config.uses_g3_schedule() else 1
@@ -191,7 +187,7 @@ func _prewarm_paths() -> void:
 	if config.is_scale():
 		_prewarm_paths_scale()
 		return
-	if config.profile == SimConfig.PROFILE_G3:
+	if config.uses_g3_schedule():
 		_prewarm_paths_g3()
 		return
 	for row in store.count:
@@ -351,9 +347,7 @@ func _dispatch(kind: int, payload: int) -> void:
 			politics.on_day_tick(day, self)
 		if economy != null:
 			economy.on_crisis_check(day, self)
-		if config.profile == SimConfig.PROFILE_G2 \
-				or config.profile == SimConfig.PROFILE_G3 \
-				or config.is_scale():
+		if config.uses_pathfinder():
 			routes.compact(store)
 		if day > 0 and day % maxi(1, config.year_days) == 0:
 			_complete_year()

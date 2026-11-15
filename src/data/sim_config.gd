@@ -39,8 +39,17 @@ const PROFILE_SCALE: int = 3
 ## G4b: gleicher 10k-Kern wie PROFILE_SCALE, aber mit aktivierter
 ## Wirtschaft/Politik und eigenem Save-Schema 8.
 const PROFILE_CIVIC: int = 4
+## G4c-P: rein visueller Pretest. 100 Agenten/24 Haushalte auf der G2-Welt,
+## aber mit dem saisonalen 120-Tage-Kalender und der G3-Feldbalance. Kein
+## Gate-, Wirtschafts- oder Save-Profil; wird nicht committet/abgenommen.
+const PROFILE_G4C_P: int = 5
 const G2_TARGET_AGENTS: int = 100
 const G2_TARGET_HOUSEHOLDS: int = 24
+const G4C_P_TARGET_AGENTS: int = 100
+const G4C_P_TARGET_HOUSEHOLDS: int = 24
+const G4C_P_WORLD_SIZE: int = 384
+const G4C_P_START_GRAIN: int = 36000
+const G4C_P_GRANARY_CAPACITY: int = 72000
 const G3_TARGET_AGENTS: int = 1000
 const G3_TARGET_HOUSEHOLDS: int = 225
 const G3_FIELD_COUNT: int = 40
@@ -297,6 +306,41 @@ static func g2(seed_value: int = DEFAULT_SEED) -> SimConfig:
 	return c
 
 
+## G4c-P-Pretestprofil: 100 Agenten, 24 Haushalte, 4 saisonale Felder auf
+## der 384er-G2-Welt. Kalender, Feldbalance und Rollenpläne folgen G3
+## (120 Tage, 4x30 Seasons, 10.000 brutto/1.000 Saatgut pro Feld/Jahr).
+## Es ist bewusst kein Gate-Profil und hat kein eigenes Save-Schema.
+static func g4c_pre(seed_value: int = DEFAULT_SEED) -> SimConfig:
+	var c: SimConfig = SimConfig.new()
+	c.seed = seed_value
+	c.profile = PROFILE_G4C_P
+	c.world_size = G4C_P_WORLD_SIZE
+	c.target_agents = G4C_P_TARGET_AGENTS
+	c.target_households = G4C_P_TARGET_HOUSEHOLDS
+	c.year_days = G3_YEAR_DAYS
+	c.season_days = G3_SEASON_DAYS
+	c.seasonal_fields = true
+	c.start_grain = G4C_P_START_GRAIN
+	c.granary_capacity = G4C_P_GRANARY_CAPACITY
+	c.field_harvest_yield = G3_FIELD_GROSS_YIELD
+	c.field_seed_cost = G3_FIELD_SEED_COST
+	c.field_plow_work_s = FIELD_PLOW_WORK_S
+	c.field_sow_work_s = FIELD_SOW_WORK_S
+	c.field_harvest_work_s = FIELD_HARVEST_WORK_S
+	c.path_cache_capacity = 2048
+	c.path_recalc_budget = 2
+	c.path_lookup_budget = 50
+	c.path_frame_ticks = 80
+	c.map_version = 1
+	c.lifecycle_first_roll_day = 10
+	c.lifecycle_roll_interval_days = 20
+	c.lifecycle_rolls_per_year = 6
+	c.chronicle_summary_days = G3_YEAR_DAYS
+	c.chronicle_summary_max = 50000
+	c.compute_derived_rates()
+	return c
+
+
 ## G3-Profil: 1000 Agenten, 225 Haushalte, 40 Felder, 120-Tage-Jahr mit
 ## 4x30-Tage-Seasons. Der Lebenszyklus behält 6 Rollen/Jahr; das Intervall
 ## wird auf 20 Tage gestreckt, damit Jahressterblichkeit/-fertilität und
@@ -430,7 +474,12 @@ func uses_seasonal_calendar() -> bool:
 
 func uses_g3_schedule() -> bool:
 	return profile == PROFILE_G3 or profile == PROFILE_SCALE \
-		or profile == PROFILE_CIVIC
+		or profile == PROFILE_CIVIC or profile == PROFILE_G4C_P
+
+
+## Profile mit A*/Cache-Navigation statt des G1-Waypoint-Graphen.
+func uses_pathfinder() -> bool:
+	return profile == PROFILE_G2 or uses_g3_schedule()
 
 
 func save_schema_version() -> int:
