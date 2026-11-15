@@ -22,15 +22,17 @@
     {"id": "props", "prefab": "props_3x3", "footprint": [3, 3], "ports": [], "tags": ["decor", "barrel", "cart", "bench"], "weight": 3.0, "conditions": {"free": true}}
   ],
   "house_variants": [
-    {"id": "h_cream_brown", "size": [6, 6], "wall": "cream", "roof": "warm_brown", "chimney": false, "windows": 2},
-    {"id": "h_brick_ochre", "size": [7, 6], "wall": "brick", "roof": "warm_ochre", "chimney": true, "windows": 2},
-    {"id": "h_stone_slate", "size": [6, 7], "wall": "stone", "roof": "slate", "chimney": true, "windows": 2},
-    {"id": "h_cream_ochre", "size": [8, 7], "wall": "cream", "roof": "warm_ochre", "chimney": true, "windows": 4},
-    {"id": "h_brick_brown", "size": [7, 7], "wall": "brick", "roof": "warm_brown", "chimney": true, "windows": 3},
-    {"id": "h_stone_brown", "size": [8, 8], "wall": "stone", "roof": "warm_brown", "chimney": false, "windows": 4},
-    {"id": "h_cream_slate", "size": [6, 6], "wall": "cream", "roof": "slate", "chimney": true, "windows": 2},
-    {"id": "h_brick_ochre_small", "size": [6, 6], "wall": "brick", "roof": "warm_ochre", "chimney": false, "windows": 2},
-    {"id": "h_stone_ochre", "size": [7, 6], "wall": "stone", "roof": "warm_ochre", "chimney": true, "windows": 2},
-    {"id": "h_cream_brown_large", "size": [8, 7], "wall": "cream", "roof": "warm_brown", "chimney": true, "windows": 4}
+    {"id": "h_cream_brown", "size": [5, 6], "wall": "cream", "roof": "warm_brown", "chimney": false, "windows": 2},
+    {"id": "h_cream_ochre", "size": [5, 7], "wall": "cream", "roof": "warm_ochre", "chimney": true, "windows": 2},
+    {"id": "h_cream_slate", "size": [5, 6], "wall": "cream", "roof": "slate", "chimney": true, "windows": 2},
+    {"id": "h_brick_brown", "size": [5, 6], "wall": "brick", "roof": "warm_brown", "chimney": true, "windows": 2},
+    {"id": "h_brick_ochre", "size": [5, 7], "wall": "brick", "roof": "warm_ochre", "chimney": true, "windows": 2},
+    {"id": "h_brick_slate", "size": [5, 6], "wall": "brick", "roof": "slate", "chimney": false, "windows": 2},
+    {"id": "h_stone_brown", "size": [5, 6], "wall": "stone", "roof": "warm_brown", "chimney": false, "windows": 2},
+    {"id": "h_stone_ochre", "size": [5, 7], "wall": "stone", "roof": "warm_ochre", "chimney": true, "windows": 2},
+    {"id": "h_stone_slate", "size": [5, 6], "wall": "stone", "roof": "slate", "chimney": true, "windows": 2},
+    {"id": "farmhouse_cream", "size": [6, 7], "wall": "cream", "roof": "warm_brown", "chimney": true, "windows": 4},
+    {"id": "farmhouse_brick", "size": [6, 7], "wall": "brick", "roof": "warm_brown", "chimney": true, "windows": 4},
+    {"id": "farmhouse_stone", "size": [6, 7], "wall": "stone", "roof": "warm_ochre", "chimney": true, "windows": 4}
   ]
 }

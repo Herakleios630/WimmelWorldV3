@@ -1,6 +1,6 @@
 extends Node2D
 
-## G4c-P2.1a Demo: organisches 100-Agenten-Dorf, 384x384, 1,5 m/Tile,
+## G4c-P2.1b Demo: kompaktes 100-Agenten-Ringdorf, 176x176, 1,5 m/Tile,
 ## 120-Tage-Jahr mit vier Jahreszeiten. Die Lauf-Agenten sind reine
 ## View-Figuren auf dem generierten Weg-Graphen; Simulation/Save bleiben
 ## unberuehrt.
@@ -37,8 +37,8 @@ func _ready() -> void:
 	var gen = GeneratorScript.new()
 	layout = gen.generate(SEED)
 	view_state = ViewState.new()
-	view_state.camera_position = Vector2(192.0, 186.0)
-	view_state.zoom = 1.15
+	view_state.camera_position = Vector2(88.0, 88.0)
+	view_state.zoom = 1.05
 	world_view = WorldViewScript.new()
 	add_child(world_view)
 	world_view.configure(layout, view_state, SEED)
@@ -50,9 +50,10 @@ func _ready() -> void:
 	_apply_time()
 	_refresh_hud()
 	var s: Dictionary = gen.summary()
-	print("G4C_P2_LAYOUT seed=%d houses=%d fields=%d roads=%d trees=%d civic=%d" % [
-		SEED, int(s["houses"]), int(s["fields"]), int(s["roads"]),
-		int(s["trees"]), int(s["civic"])])
+	print("G4C_P2_LAYOUT seed=%d houses=%d rows=%d farms=%d fields=%d roads=%d trees=%d civic=%d" % [
+		SEED, int(s["houses"]), int(s["rows"]), int(s["farmsteads"]),
+		int(s["fields"]), int(s["roads"]), int(s["trees"]), int(s["civic"])])
+
 
 
 func _process(delta: float) -> void:
@@ -142,7 +143,7 @@ func _refresh_hud() -> void:
 	var s: Dictionary = layout.get("summary", {})
 	var house_count: int = (layout["houses"] as Array).size()
 	var field_count: int = (layout["fields"] as Array).size()
-	_hud_labels[0].text = "G4c-P2.1a · %02d:%02d · Tag %d/120 · %s" % [
+	_hud_labels[0].text = "G4c-P2.1b · %02d:%02d · Tag %d/120 · %s" % [
 		hh, mm, day, SEASONS[season_index()]]
 	_hud_labels[1].text = "%d Agenten · %d Häuser · %d Feldparzellen · %d Bäume" % [
 		world_view.walkers.size(), house_count, field_count,

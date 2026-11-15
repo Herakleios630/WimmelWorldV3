@@ -1,23 +1,43 @@
 extends RefCounted
 
-## G4c-P2.1a: port-basierter, deterministischer Siedlungsgenerator.
-## Reines Layout/View-Modul; keine Simulation, kein Save, keine Balance.
-## Segmente kommen aus segments.json; Prefabs werden in world_view_p2.gd
-## aus Kenney-RPG-Tiles komponiert.
+## G4c-P2.1b: kompakter Oval-/Ring-Kern mit echten 16x16-House-Rows und
+## Farmstead-Prefabs. Reines Layout/View-Modul; keine Simulation, kein Save,
+## keine Balance. Segmente kommen aus segments.json; Prefabs werden in
+## world_view_p2.gd aus Kenney-RPG-Tiles komponiert.
 
-const WORLD_SIZE: int = 384
+const WORLD_SIZE: int = 176
+const CENTER: Vector2i = Vector2i(88, 88)
 const SEGMENTS_PATH: String = "res://tests/g4c_p2/segments.json"
 
-const LANE_BASES: Array = [96, 126, 156, 238, 268, 298]
-const FIELD_RECTS: Array = [
-	Rect2i(38, 148, 10, 8), Rect2i(38, 202, 10, 8),
-	Rect2i(38, 256, 10, 8), Rect2i(318, 150, 10, 8),
-	Rect2i(318, 212, 10, 8), Rect2i(152, 330, 10, 8),
+## 8 House-Rows a 16x16, je 3 Haeuser -> 24 Haeuser. Nordreihen oeffnen zum
+## Platz, Suedreihen zur Suedgasse.
+const ROW_SLOTS: Array = [
+	{"x": 50, "y": 58, "wall": 0}, {"x": 68, "y": 57, "wall": 1},
+	{"x": 92, "y": 58, "wall": 2}, {"x": 108, "y": 58, "wall": 0},
+	{"x": 50, "y": 102, "wall": 1}, {"x": 68, "y": 101, "wall": 2},
+	{"x": 92, "y": 102, "wall": 0}, {"x": 110, "y": 101, "wall": 1},
 ]
+
+const FARMSTEAD_RECTS: Array = [
+	Rect2i(60, 16, 16, 16), Rect2i(142, 50, 16, 16),
+	Rect2i(56, 138, 16, 16),
+]
+
+## 6 Feldparzellen, je 2 an einem Hof (0/1 -> Hof 0, 2/3 -> Hof 1, 4/5 -> Hof 2).
+const FIELD_RECTS: Array = [
+	Rect2i(42, 20, 10, 8), Rect2i(42, 30, 10, 8),
+	Rect2i(148, 74, 10, 8), Rect2i(148, 86, 10, 8),
+	Rect2i(78, 140, 10, 8), Rect2i(78, 150, 10, 8),
+]
+
+const ORCHARD_RECTS: Array = [
+	Rect2i(18, 52, 12, 12), Rect2i(142, 100, 12, 12),
+	Rect2i(112, 18, 10, 10),
+]
+
 const CIVIC: Array = [
-	{"kind": "barn", "rect": Rect2i(166, 188, 9, 7), "roof": "warm_brown"},
-	{"kind": "workshop", "rect": Rect2i(202, 190, 8, 7), "roof": "slate"},
-	{"kind": "granary", "rect": Rect2i(170, 204, 6, 5), "roof": "warm_ochre"},
+	{"kind": "workshop", "rect": Rect2i(71, 81, 8, 6), "roof": "slate"},
+	{"kind": "granary", "rect": Rect2i(97, 81, 7, 5), "roof": "warm_ochre"},
 ]
 
 var segments: Dictionary = {}
@@ -30,33 +50,38 @@ func generate(seed_value: int = 421337) -> Dictionary:
 	rng.seed = seed_value
 	_load_segments()
 	layout = {
-		"version": 1,
+		"version": 2,
 		"seed": seed_value,
 		"size": WORLD_SIZE,
 		"meters_per_tile": 1.5,
 		"day_length": 120,
 		"roads": {},
 		"plaza": {},
-		"plaza_rect": Rect2i(183, 186, 18, 14),
+		"plaza_rect": Rect2i(80, 82, 16, 12),
 		"houses": [],
+		"house_rows": [],
 		"fields": [],
+		"farmsteads": [],
 		"civic": [],
 		"pond": {},
-		"orchard": Rect2i(62, 86, 18, 12),
+		"orchards": [],
+		"orchard": Rect2i(-1, -1, 0, 0),
 		"trees": [],
 		"props": [],
 		"gates": [],
 		"wall_plan": [],
 	}
-	_occupy_rect(layout["plaza_rect"], false)
-	_stamp_plaza(layout["plaza_rect"])
-	_stamp_vertical_avenue()
+	_stamp_plaza()
+	_stamp_ring_road()
+	_stamp_cross_streets()
 	_stamp_lanes()
-	_place_houses()
+	_stamp_farm_roads()
+	_place_house_rows()
 	_place_fields()
 	_place_civic()
+	_place_farmsteads()
 	_place_pond()
-	_place_orchard()
+	_place_orchards()
 	_scatter_trees()
 	_place_props()
 	_add_wall_plan()
@@ -76,139 +101,149 @@ func _load_segments() -> void:
 	layout["segments_version"] = segments["version"]
 
 
-func _stamp_plaza(rect: Rect2i) -> void:
+func _stamp_plaza() -> void:
+	var rect: Rect2i = layout["plaza_rect"]
+	var cx: float = float(rect.position.x) + float(rect.size.x) * 0.5
+	var cy: float = float(rect.position.y) + float(rect.size.y) * 0.5
+	var rx: float = float(rect.size.x) * 0.5
+	var ry: float = float(rect.size.y) * 0.5
 	for y in range(rect.position.y, rect.position.y + rect.size.y):
 		for x in range(rect.position.x, rect.position.x + rect.size.x):
-			var t: Vector2i = Vector2i(x, y)
-			layout["plaza"][t] = true
-			layout["roads"][t] = 2
+			var dx: float = (float(x) - cx) / rx
+			var dy: float = (float(y) - cy) / ry
+			if dx * dx + dy * dy <= 1.0:
+				var t: Vector2i = Vector2i(x, y)
+				layout["plaza"][t] = true
+				layout["roads"][t] = 2
 
 
 func _stamp_road(t: Vector2i, kind: int = 1) -> void:
-	if t.x < 2 or t.y < 2 or t.x >= WORLD_SIZE - 2 or t.y >= WORLD_SIZE - 2:
+	if t.x < 3 or t.y < 3 or t.x >= WORLD_SIZE - 3 or t.y >= WORLD_SIZE - 3:
 		return
 	if (layout["plaza"] as Dictionary).has(t):
 		return
 	layout["roads"][t] = kind
 
 
-func _stamp_vertical_avenue() -> void:
-	for y in range(58, 334):
-		var x: int = 192 + int(round(sin(float(y) * 0.045) * 5.0
-			+ sin(float(y) * 0.013 + 1.7) * 7.0))
+func _stamp_ring_road() -> void:
+	var rx: float = 54.0
+	var ry: float = 46.0
+	for y in range(CENTER.y - 54, CENTER.y + 55):
+		for x in range(CENTER.x - 62, CENTER.x + 63):
+			var dx: float = float(x - CENTER.x)
+			var dy: float = float(y - CENTER.y)
+			var a: float = atan2(dy, dx)
+			var wob: float = sin(a * 3.0 + 1.3) * 2.4 + sin(a * 5.0 + 0.7) * 1.2
+			var d: float = sqrt((dx / (rx + wob)) * (dx / (rx + wob))
+				+ (dy / (ry + wob)) * (dy / (ry + wob)))
+			if d >= 0.975 and d <= 1.026:
+				_stamp_road(Vector2i(x, y))
+
+
+func _stamp_cross_streets() -> void:
+	for y in range(40, 137):
+		var x: int = 88 + int(round(sin(float(y) * 0.09) * 1.4
+			+ sin(float(y) * 0.031 + 1.0) * 1.2))
 		_stamp_road(Vector2i(x, y))
 		_stamp_road(Vector2i(x + 1, y))
+	for x in range(40, 137):
+		var y: int = 88 + int(round(sin(float(x) * 0.08 + 2.1) * 1.4))
+		_stamp_road(Vector2i(x, y))
+		_stamp_road(Vector2i(x, y + 1))
 
 
 func _stamp_lanes() -> void:
-	var lanes: Array = []
-	for li in LANE_BASES.size():
-		var base_y: int = LANE_BASES[li]
-		var phase: float = float(li) * 1.31 + 0.4
-		var phase2: float = float(li) * 0.77
-		var ys: Dictionary = {}
-		for x in range(132, 254):
-			var y: int = base_y + int(round(sin(float(x - 132) * 0.055
-				+ phase) * 3.0 + sin(float(x) * 0.11 + phase2) * 1.4))
-			ys[x] = y
+	var lanes: Array = [
+		{"base": 77, "x0": 44, "x1": 132},
+		{"base": 98, "x0": 44, "x1": 132},
+		{"base": 121, "x0": 44, "x1": 132},
+	]
+	for lane in lanes:
+		var base_y: int = int(lane["base"])
+		for x in range(int(lane["x0"]), int(lane["x1"]) + 1):
+			var wob: float = sin(float(x) * 0.11 + float(base_y) * 0.07) * 1.2
+			var y: int = base_y + int(round(wob))
 			_stamp_road(Vector2i(x, y))
 			_stamp_road(Vector2i(x, y + 1))
-		lanes.append({"index": li, "base_y": base_y, "ys": ys,
-			"x0": 132, "x1": 253})
 	layout["lanes"] = lanes
 
 
-func _place_houses() -> void:
-	var variants: Array = [
-		[6, 6], [7, 6], [6, 7], [8, 7], [7, 7],
-		[8, 8], [6, 6], [6, 6], [8, 7]]
-	var lanes: Array = layout["lanes"]
-	for lane in lanes:
-		var ys: Dictionary = lane["ys"]
-		var placed: int = 0
-		var x: int = 140
-		while x < 246 and placed < 4:
-			var vi: int = int((int(lane["index"]) * 4 + placed
-				+ int(rng.randi_range(0, 1))) % variants.size())
-			var wh: Array = variants[vi]
-			var w: int = int(wh[0])
-			var h: int = int(wh[1])
-			var cx: int = x + w / 2
-			var lane_y: int = int(ys.get(clampi(cx, 132, 253), lane["base_y"]))
-			var rect: Rect2i = Rect2i(cx - w / 2, lane_y - h, w, h)
-			var door_tile: Vector2i = Vector2i(rect.position.x + w / 2,
-				lane_y - 1)
-			var flat: bool = true
-			for dx in range(-w / 2, w / 2 + 1):
-				var ly: int = int(ys.get(clampi(cx + dx, 132, 253), lane_y))
-				if absi(ly - lane_y) > 1:
-					flat = false
-			var garden_side: int = 1 if rng.randf() < 0.55 else -1
-			var garden: Rect2i = Rect2i(
-				rect.position.x + (w + 1 if garden_side > 0 else -5),
-				rect.position.y + 2, 4, 4)
-			if flat and _rect_free(rect, 0) and _rect_free(garden, 0) \
-					and _is_road(Vector2i(rect.position.x + w / 2, lane_y)) \
-					and _is_road(Vector2i(rect.position.x + w / 2, lane_y + 1)):
-				_occupy_rect(rect, true)
-				_occupy_rect(garden, true)
-				(layout["houses"] as Array).append({
-					"rect": rect,
-					"variant": vi,
-					"door": door_tile,
-					"lane": int(lane["index"]),
-					"garden": garden,
-					"garden_side": garden_side,
-					"fence": rng.randf() < 0.8,
-				})
-				placed += 1
-			x += w + int(rng.randi_range(5, 11))
-	# Restliche Häuser als kleine Nachbarschaft südlich des Platzes.
-	var spare_rects: Array = [
-		Rect2i(150, 212, 6, 6), Rect2i(158, 214, 6, 6),
-		Rect2i(214, 210, 7, 6), Rect2i(222, 212, 6, 7),
-		Rect2i(132, 212, 7, 6), Rect2i(232, 212, 7, 6),
-		Rect2i(132, 240, 6, 6), Rect2i(232, 244, 7, 6),
-		Rect2i(148, 260, 7, 6), Rect2i(232, 278, 6, 6),
-		Rect2i(132, 282, 6, 6), Rect2i(216, 294, 6, 6),
-	]
-	for r in spare_rects:
-		if (layout["houses"] as Array).size() >= 24:
-			break
-		var rr: Rect2i = r
-		if _rect_free(rr, 0):
-			_occupy_rect(rr, true)
-			var door: Vector2i = Vector2i(rr.position.x + rr.size.x / 2,
-				rr.position.y + rr.size.y)
-			var spare_garden: Rect2i = Rect2i(rr.position.x + rr.size.x + 1,
-				rr.position.y + 2, 3, 3)
-			if _rect_free(spare_garden, 0):
-				_occupy_rect(spare_garden, true)
-			else:
-				spare_garden = Rect2i(-1, -1, 0, 0)
+func _stamp_farm_roads() -> void:
+	# Nordhof -> Ring.
+	for y in range(32, 47):
+		_stamp_road(Vector2i(67, y))
+		_stamp_road(Vector2i(68, y))
+	# Osthof -> Ring und Feldzufahrt.
+	for x in range(129, 142):
+		_stamp_road(Vector2i(x, 57))
+		_stamp_road(Vector2i(x, 58))
+	for y in range(66, 95):
+		_stamp_road(Vector2i(145, y))
+		_stamp_road(Vector2i(146, y))
+	# Suedhof -> Ring.
+	for y in range(129, 138):
+		_stamp_road(Vector2i(64, y))
+		_stamp_road(Vector2i(65, y))
+	# Teichstich.
+	for x in range(28, 37):
+		_stamp_road(Vector2i(x, 95))
+		_stamp_road(Vector2i(x, 96))
+	# Feldzufahrten.
+	for x in range(52, 60):
+		_stamp_road(Vector2i(x, 24))
+		_stamp_road(Vector2i(x, 34))
+	for x in range(72, 78):
+		_stamp_road(Vector2i(x, 144))
+		_stamp_road(Vector2i(x, 154))
+
+
+func _place_house_rows() -> void:
+	for ri in ROW_SLOTS.size():
+		var slot: Dictionary = ROW_SLOTS[ri]
+		var row_rect: Rect2i = Rect2i(int(slot["x"]), int(slot["y"]), 16, 16)
+		if not _rect_free(row_rect, 0):
+			continue
+		_occupy_rect(row_rect, true)
+		var wall: int = int(slot["wall"])
+		var houses: Array = []
+		var doors: Array = []
+		for hi in 3:
+			var variant: int = wall * 3 + (ri + hi) % 3
+			var wh: Array = _house_size(variant)
+			var h_rect: Rect2i = Rect2i(row_rect.position.x + hi * 5,
+				row_rect.position.y, int(wh[0]), int(wh[1]))
+			var door: Vector2i = Vector2i(h_rect.position.x + h_rect.size.x / 2,
+				h_rect.position.y + h_rect.size.y - 1)
+			houses.append({"rect": h_rect, "variant": variant,
+				"door": door, "row": ri})
+			doors.append(door)
 			(layout["houses"] as Array).append({
-				"rect": rr,
-				"variant": int(rng.randi_range(0, 8)),
-				"door": door,
-				"lane": -1,
-				"garden": spare_garden,
-				"garden_side": 1,
-				"fence": true,
+				"rect": h_rect, "variant": variant, "door": door,
+				"lane": -1, "row": ri, "garden": Rect2i(-1, -1, 0, 0),
+				"garden_side": 0, "fence": false,
 			})
+		var garden: Rect2i = Rect2i(row_rect.position.x + 1,
+			row_rect.position.y + 9, 14, 5)
+		(layout["house_rows"] as Array).append({
+			"rect": row_rect, "houses": houses, "doors": doors,
+			"garden": garden, "wall": wall,
+			"fence": true,
+		})
 
 
 func _place_fields() -> void:
 	for i in FIELD_RECTS.size():
 		var rect: Rect2i = FIELD_RECTS[i]
-		if not _rect_free(rect, 1):
+		if not _rect_free(rect, 0):
 			continue
 		_occupy_rect(rect, true)
 		(layout["fields"] as Array).append({
 			"rect": rect,
 			"index": i,
+			"farm": i / 2,
 			"stage": [3, 4, 5, 2, 4, 3][i],
-			"hedge": i % 2 == 0,
-			"fence": i % 2 == 1,
+			"hedge": i % 3 != 1,
+			"fence": i % 3 == 1,
 		})
 
 
@@ -222,20 +257,50 @@ func _place_civic() -> void:
 			"kind": c["kind"], "rect": rect, "roof": c["roof"]})
 
 
+func _place_farmsteads() -> void:
+	for i in FARMSTEAD_RECTS.size():
+		var rect: Rect2i = FARMSTEAD_RECTS[i]
+		if not _rect_free(rect, 0):
+			continue
+		_occupy_rect(rect, true)
+		var house_local: Vector2i = Vector2i(9, 1)
+		var barn_local: Vector2i = Vector2i(1, 2)
+		var house_rect: Rect2i = Rect2i(rect.position + house_local, Vector2i(6, 7))
+		var barn_rect: Rect2i = Rect2i(rect.position + barn_local, Vector2i(7, 6))
+		var yard: Rect2i = Rect2i(rect.position + Vector2i(2, 9), Vector2i(12, 6))
+		var variant: int = 9 + i % 3
+		_occupy_rect(house_rect, true)
+		_occupy_rect(barn_rect, true)
+		(layout["farmsteads"] as Array).append({
+			"index": i, "rect": rect, "variant": variant,
+			"house_local": house_local, "barn_local": barn_local,
+			"house_rect": house_rect, "barn_rect": barn_rect,
+			"yard": yard, "fence": true,
+		})
+		var yard_x: int = yard.position.x
+		var yard_y: int = yard.position.y
+		(layout["props"] as Array).append({"kind": "cart",
+			"tile": Vector2i(yard_x + 2, yard_y + 3)})
+		(layout["props"] as Array).append({"kind": "barrel",
+			"tile": Vector2i(yard_x + 7, yard_y + 2)})
+		(layout["props"] as Array).append({"kind": "woodpile",
+			"tile": Vector2i(yard_x + 9, yard_y + 3)})
+
+
 func _place_pond() -> void:
-	var center := Vector2(304.0, 82.0)
-	var rx: float = 15.0
-	var ry: float = 9.0
+	var center := Vector2(18.0, 96.0)
+	var rx: float = 10.0
+	var ry: float = 7.0
 	var water: Array = []
 	var shore: Array = []
-	for y in range(68, 98):
-		for x in range(284, 326):
+	for y in range(86, 107):
+		for x in range(5, 32):
 			var dx: float = (float(x) - center.x) / rx
 			var dy: float = (float(y) - center.y) / ry
 			var d: float = dx * dx + dy * dy
 			if d <= 1.0:
 				water.append(Vector2i(x, y))
-			elif d <= 1.42:
+			elif d <= 1.38:
 				shore.append(Vector2i(x, y))
 	layout["pond"] = {"center": center, "water": water, "shore": shore}
 	for t in water:
@@ -243,58 +308,90 @@ func _place_pond() -> void:
 		_occupy_rect(Rect2i(t.x, t.y, 1, 1), true)
 
 
-func _place_orchard() -> void:
-	var rect: Rect2i = layout["orchard"]
-	if not _rect_free(rect, 1):
-		layout["orchard"] = Rect2i(-1, -1, 0, 0)
-		return
-	_occupy_rect(rect, true)
-	var trees: Array = []
-	for gy in range(2, rect.size.y - 1, 3):
-		for gx in range(2, rect.size.x - 1, 3):
-			trees.append(Vector2i(rect.position.x + gx,
-				rect.position.y + gy))
-	layout["orchard_trees"] = trees
+func _place_orchards() -> void:
+	for i in ORCHARD_RECTS.size():
+		var rect: Rect2i = ORCHARD_RECTS[i]
+		if not _rect_free(rect, 1):
+			continue
+		_occupy_rect(rect, true)
+		var trees: Array = []
+		for gy in range(2, rect.size.y - 1, 3):
+			for gx in range(2, rect.size.x - 1, 3):
+				var t: Vector2i = rect.position + Vector2i(gx, gy)
+				(layout["trees"] as Array).append({
+					"tile": t, "variant": (t.x + t.y) % 3, "fruit": true})
+				trees.append(t)
+		(layout["orchards"] as Array).append({
+			"rect": rect, "trees": trees, "index": i})
 
 
 func _scatter_trees() -> void:
-	var placed: int = 0
-	var tries: int = 0
-	while placed < 320 and tries < 2400:
-		tries += 1
-		var t: Vector2i = Vector2i(rng.randi_range(8, WORLD_SIZE - 9),
-			rng.randi_range(8, WORLD_SIZE - 9))
-		if _is_walkable(t) or _is_occupied(t):
-			continue
-		if t.distance_to(Vector2(192, 193)) < 24.0:
-			continue
-		if _near_rect(t, layout["plaza_rect"], 2):
-			continue
-		_occupy_rect(Rect2i(t.x, t.y, 1, 1), true)
-		(layout["trees"] as Array).append({
-			"tile": t, "variant": (t.x * 7 + t.y * 13) % 3,
-			"fruit": false})
-		placed += 1
-	for t in layout.get("orchard_trees", []):
-		(layout["trees"] as Array).append({
-			"tile": t, "variant": (t.x + t.y) % 3, "fruit": true})
+	# Geclusterte Waeldchen/Hecken statt gleichmaessiger Punkte.
+	var clusters: Array = [
+		{"c": Vector2(14.0, 22.0), "r": 8.0, "n": 26},
+		{"c": Vector2(30.0, 132.0), "r": 9.0, "n": 28},
+		{"c": Vector2(156.0, 30.0), "r": 8.0, "n": 24},
+		{"c": Vector2(154.0, 140.0), "r": 9.0, "n": 28},
+		{"c": Vector2(100.0, 162.0), "r": 7.0, "n": 18},
+		{"c": Vector2(38.0, 74.0), "r": 5.0, "n": 10},
+	]
+	for cluster in clusters:
+		var c: Vector2 = cluster["c"]
+		var radius: float = cluster["r"]
+		var placed: int = 0
+		var tries: int = 0
+		while placed < int(cluster["n"]) and tries < 260:
+			tries += 1
+			var ang: float = rng.randf_range(0.0, TAU)
+			var rad: float = radius * sqrt(rng.randf()) * rng.randf_range(0.55, 1.0)
+			var t: Vector2i = Vector2i(int(round(c.x + cos(ang) * rad)),
+				int(round(c.y + sin(ang) * rad)))
+			if not _tree_spot_free(t):
+				continue
+			_occupy_rect(Rect2i(t.x, t.y, 1, 1), true)
+			(layout["trees"] as Array).append({
+				"tile": t, "variant": (t.x * 7 + t.y * 13) % 3,
+				"fruit": false})
+			placed += 1
+	# Einzelbaeume an Gassen und Platzrändern.
+	var lane_trees: Array = [
+		Vector2i(45, 79), Vector2i(47, 100), Vector2i(129, 79),
+		Vector2i(131, 100), Vector2i(55, 47), Vector2i(121, 47),
+		Vector2i(55, 129), Vector2i(121, 129), Vector2i(77, 79),
+		Vector2i(99, 79),
+	]
+	for t in lane_trees:
+		if _tree_spot_free(t):
+			_occupy_rect(Rect2i(t.x, t.y, 1, 1), true)
+			(layout["trees"] as Array).append({
+				"tile": t, "variant": (t.x + t.y * 3) % 3, "fruit": false})
+
+
+func _tree_spot_free(t: Vector2i) -> bool:
+	if t.x < 6 or t.y < 6 or t.x >= WORLD_SIZE - 6 or t.y >= WORLD_SIZE - 6:
+		return false
+	if _is_walkable(t) or _is_occupied(t):
+		return false
+	if _near_rect(t, layout["plaza_rect"], 1):
+		return false
+	return true
 
 
 func _place_props() -> void:
 	var props: Array = [
-		{"kind": "market", "tile": Vector2i(186, 187)},
-		{"kind": "market", "tile": Vector2i(196, 187)},
-		{"kind": "bench", "tile": Vector2i(187, 197)},
-		{"kind": "bench", "tile": Vector2i(197, 198)},
-		{"kind": "bench", "tile": Vector2i(184, 192)},
-		{"kind": "barrel", "tile": Vector2i(201, 197)},
-		{"kind": "barrel", "tile": Vector2i(202, 198)},
-		{"kind": "cart", "tile": Vector2i(200, 203)},
-		{"kind": "woodpile", "tile": Vector2i(201, 205)},
-		{"kind": "well", "tile": Vector2i(191, 192)},
-		{"kind": "sack", "tile": Vector2i(172, 210)},
-		{"kind": "sack", "tile": Vector2i(173, 210)},
-		{"kind": "laundry", "tile": Vector2i(208, 206)},
+		{"kind": "well", "tile": Vector2i(88, 88)},
+		{"kind": "market", "tile": Vector2i(83, 86)},
+		{"kind": "market", "tile": Vector2i(91, 86)},
+		{"kind": "bench", "tile": Vector2i(84, 92)},
+		{"kind": "bench", "tile": Vector2i(92, 92)},
+		{"kind": "bench", "tile": Vector2i(88, 93)},
+		{"kind": "barrel", "tile": Vector2i(68, 85)},
+		{"kind": "barrel", "tile": Vector2i(104, 85)},
+		{"kind": "cart", "tile": Vector2i(68, 94)},
+		{"kind": "woodpile", "tile": Vector2i(104, 93)},
+		{"kind": "laundry", "tile": Vector2i(105, 91)},
+		{"kind": "sack", "tile": Vector2i(69, 85)},
+		{"kind": "sack", "tile": Vector2i(70, 85)},
 	]
 	for p in props:
 		(layout["props"] as Array).append(p)
@@ -303,13 +400,21 @@ func _place_props() -> void:
 func _add_wall_plan() -> void:
 	# Nur Planung: Wall/Gate/Tower-Segmente fuer spaetere Siedlungstypen.
 	layout["wall_plan"] = [
-		{"segment": "wall_stone", "side": "n", "y": 20},
-		{"segment": "wall_stone", "side": "s", "y": 364},
-		{"segment": "gate_wood", "side": "n", "x": 192},
-		{"segment": "gate_wood", "side": "s", "x": 192},
-		{"segment": "tower", "side": "nw", "tile": Vector2i(18, 18)},
-		{"segment": "tower", "side": "se", "tile": Vector2i(366, 366)},
+		{"segment": "wall_stone", "side": "n", "y": 8},
+		{"segment": "wall_stone", "side": "s", "y": 168},
+		{"segment": "gate_wood", "side": "n", "x": 88},
+		{"segment": "gate_wood", "side": "s", "x": 88},
+		{"segment": "tower", "side": "nw", "tile": Vector2i(10, 10)},
+		{"segment": "tower", "side": "se", "tile": Vector2i(166, 166)},
 	]
+
+
+func _house_size(variant: int) -> Array:
+	var variants: Array = house_variants()
+	if variant >= 0 and variant < variants.size():
+		var size: Array = variants[variant].get("size", [5, 6])
+		return [int(size[0]), int(size[1])]
+	return [5, 6]
 
 
 func _rect_free(rect: Rect2i, margin: int) -> bool:
@@ -341,14 +446,8 @@ func _is_occupied(t: Vector2i) -> bool:
 	return (layout.get("occupied", {}) as Dictionary).has(t)
 
 
-func _is_road(t: Vector2i) -> bool:
-	return int((layout["roads"] as Dictionary).get(t, 0)) == 1
-
-
 func _is_walkable(t: Vector2i) -> bool:
-	if (layout["roads"] as Dictionary).has(t):
-		return true
-	return false
+	return (layout["roads"] as Dictionary).has(t)
 
 
 func _near_rect(t: Vector2i, rect: Rect2i, margin: int) -> bool:
@@ -368,10 +467,12 @@ func house_variants() -> Array:
 func summary() -> Dictionary:
 	return {
 		"houses": (layout["houses"] as Array).size(),
+		"rows": (layout["house_rows"] as Array).size(),
+		"farmsteads": (layout["farmsteads"] as Array).size(),
 		"fields": (layout["fields"] as Array).size(),
 		"roads": (layout["roads"] as Dictionary).size(),
 		"trees": (layout["trees"] as Array).size(),
+		"orchards": (layout["orchards"] as Array).size(),
 		"civic": (layout["civic"] as Array).size(),
 		"walkable": layout.get("walkable_count", 0),
 	}
-

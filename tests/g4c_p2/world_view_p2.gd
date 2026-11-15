@@ -1,8 +1,8 @@
 extends Node2D
 
-## G4c-P2.1a View: komponiert das generierte Dorf aus Kenney-RPG-Tiles.
-## Reine Anzeige. 100 Lauf-Agenten sind Demo-Viewer (kein Sim-Eingriff),
-## deterministisch aus dem Siedlungs-Seed abgeleitet.
+## G4c-P2.1b View: komponiert das kompakte Ringdorf aus Kenney-RPG-Tiles.
+## House-Rows und Farmsteads sind echte 16x16-Prefabs. Reine Anzeige.
+## 100 Lauf-Agenten sind Demo-Viewer (kein Sim-Eingriff).
 
 const TILE: int = 16
 const RP_PITCH: int = 17
@@ -36,13 +36,13 @@ const CHAR_TINTS: Array = [
 	Color(1, 1, 1), Color(1.0, 0.92, 0.82), Color(0.88, 0.94, 1.0),
 	Color(1.0, 0.88, 0.88), Color(0.94, 1.0, 0.88)]
 const FIELD_COLORS: Array = [
-	Color(0.44, 0.34, 0.22), Color(0.52, 0.38, 0.23),
-	Color(0.60, 0.46, 0.26), Color(0.42, 0.52, 0.24),
-	Color(0.66, 0.62, 0.24), Color(0.58, 0.48, 0.20)]
+	Color(0.40, 0.31, 0.20), Color(0.46, 0.33, 0.21),
+	Color(0.52, 0.40, 0.24), Color(0.38, 0.45, 0.24),
+	Color(0.58, 0.53, 0.24), Color(0.50, 0.40, 0.20)]
 const CROP_COLORS: Array = [
-	Color(0.42, 0.33, 0.20), Color(0.48, 0.36, 0.21),
-	Color(0.54, 0.42, 0.23), Color(0.36, 0.50, 0.22),
-	Color(0.72, 0.64, 0.26), Color(0.70, 0.56, 0.24)]
+	Color(0.36, 0.28, 0.17), Color(0.42, 0.31, 0.18),
+	Color(0.48, 0.37, 0.20), Color(0.34, 0.44, 0.20),
+	Color(0.64, 0.57, 0.24), Color(0.60, 0.48, 0.21)]
 
 var layout: Dictionary
 var view_state: ViewState
@@ -66,6 +66,9 @@ var _water_tex: Texture2D
 var _sand_tex: Texture2D
 var _house_tex: Dictionary = {}
 var _civic_tex: Dictionary = {}
+var _row_tex: Dictionary = {}
+var _farm_tex: Dictionary = {}
+var _barn_tex: Texture2D
 var _base16_cache: Dictionary = {}
 var _walkable: Dictionary = {}
 var _font: Font
@@ -79,6 +82,7 @@ func configure(p_layout: Dictionary, p_view_state: ViewState, seed_value: int) -
 	_walkable = layout["roads"]
 	_build_assets()
 	_build_houses()
+	_build_prefabs()
 	_build_walkers()
 
 
@@ -176,8 +180,8 @@ func _make_grass() -> Texture2D:
 	for y in 64:
 		for x in 64:
 			var c: Color = img.get_pixel(x, y)
-			img.set_pixel(x, y, Color(c.r * 0.64 + 0.06, c.g * 0.70 + 0.06,
-				c.b * 0.54 + 0.05, 1.0))
+			img.set_pixel(x, y, Color(c.r * 0.60 + 0.09, c.g * 0.66 + 0.09,
+				c.b * 0.52 + 0.08, 1.0))
 	for i in 9:
 		var px: int = (i * 29) % 60 + 2
 		var py: int = (i * 47) % 60 + 2
@@ -212,6 +216,53 @@ func _build_houses() -> void:
 		_civic_tex[kind] = _compose_house(rect.size.x, rect.size.y,
 			1 if kind != "granary" else 0, roof_i, true, 2,
 			BASE_BIG_DOOR)
+
+
+func _build_prefabs() -> void:
+	_barn_tex = _compose_house(7, 6, 2, 0, false, 0, BASE_BIG_DOOR)
+	# House-Rows: 3 Haeuser je 16x16-Prefab, gemeinsam als ein Bild komponiert.
+	for ri in (layout["house_rows"] as Array).size():
+		var row: Dictionary = layout["house_rows"][ri]
+		var row_rect: Rect2i = row["rect"]
+		var img: Image = Image.create(16 * TILE, 16 * TILE, false,
+			Image.FORMAT_RGBA8)
+		img.fill(Color(0, 0, 0, 0))
+		for h in row["houses"]:
+			var h_rect: Rect2i = h["rect"]
+			var tex: Texture2D = _house_tex.get(int(h["variant"]))
+			if tex == null:
+				continue
+			_blit_tex_img(img, tex,
+				(h_rect.position.x - row_rect.position.x) * TILE,
+				(h_rect.position.y - row_rect.position.y) * TILE)
+		_row_tex[ri] = ImageTexture.create_from_image(img)
+	# Farmsteads: Haus + Scheune als 16x16-Prefab.
+	for fi in (layout["farmsteads"] as Array).size():
+		var fs: Dictionary = layout["farmsteads"][fi]
+		var img2: Image = Image.create(16 * TILE, 16 * TILE, false,
+			Image.FORMAT_RGBA8)
+		img2.fill(Color(0, 0, 0, 0))
+		var house_tex: Texture2D = _house_tex.get(int(fs["variant"]))
+		if house_tex != null:
+			var hl: Vector2i = fs["house_local"]
+			_blit_tex_img(img2, house_tex, hl.x * TILE, hl.y * TILE)
+		if _barn_tex != null:
+			var bl: Vector2i = fs["barn_local"]
+			_blit_tex_img(img2, _barn_tex, bl.x * TILE, bl.y * TILE)
+		_farm_tex[fi] = ImageTexture.create_from_image(img2)
+
+
+func _blit_tex_img(dst: Image, tex: Texture2D, dx: int, dy: int) -> void:
+	var src: Image = tex.get_image()
+	for y in src.get_height():
+		for x in src.get_width():
+			if dy + y < 0 or dx + x < 0:
+				continue
+			if dy + y >= dst.get_height() or dx + x >= dst.get_width():
+				continue
+			var c: Color = src.get_pixel(x, y)
+			if c.a > 0.01:
+				dst.set_pixel(dx + x, dy + y, c)
 
 
 func _compose_house(w: int, h: int, wall_i: int, roof_i: int,
@@ -272,6 +323,7 @@ func _draw() -> void:
 	_draw_roads(vis)
 	_draw_plaza(vis)
 	_draw_fields(vis)
+	_draw_farm_yards(vis)
 	_draw_orchard(vis)
 	_draw_objects(vis)
 
@@ -299,6 +351,25 @@ func _draw_ground(vis: Rect2) -> void:
 	if r.size.x <= 0.0 or r.size.y <= 0.0:
 		return
 	draw_texture_rect(_grass_tex, r, true)
+	# Grasbueschel/Moosflecken brechen die flaechige Wiese auf.
+	var x0: int = maxi(0, int(vis.position.x))
+	var y0: int = maxi(0, int(vis.position.y))
+	var x1: int = mini(int(layout["size"]), int(vis.end.x) + 1)
+	var y1: int = mini(int(layout["size"]), int(vis.end.y) + 1)
+	for gy in range(y0, y1, 2):
+		for gx in range(x0, x1, 2):
+			var h: int = (gx * 73856093 + gy * 19349663) & 1023
+			if h % 7 != 0:
+				continue
+			var px: float = float(gx * TILE) + float(h % 13)
+			var py: float = float(gy * TILE) + float((h / 13) % 13)
+			draw_line(Vector2(px, py), Vector2(px - 1.5, py - 4),
+				Color(0.30, 0.42, 0.20, 0.55), 1.0)
+			draw_line(Vector2(px + 2, py), Vector2(px + 3, py - 3.5),
+				Color(0.24, 0.36, 0.16, 0.50), 1.0)
+			if h % 5 == 0:
+				draw_circle(Vector2(px + 1, py + 1), 2.2,
+					Color(0.36, 0.46, 0.24, 0.20))
 	draw_rect(_world_rect(), Color(0.08, 0.12, 0.08, 0.85), false, 3.0)
 
 
@@ -326,26 +397,48 @@ func _draw_road_run(xa: int, xb: int, y: int) -> void:
 	if xb <= xa:
 		return
 	var r: Rect2 = Rect2(Vector2(xa * TILE, y * TILE), Vector2((xb - xa) * TILE, TILE))
-	draw_texture_rect(_dirt_tex, r, true, Color(0.93, 0.86, 0.76))
-	# Weiche, dunkle Wegränder: organischer als harte Rechtecke.
+	draw_texture_rect(_dirt_tex, r, true, Color(0.80, 0.68, 0.53))
+	# Weiche, dunkle Wegraender: organischer als harte Rechtecke.
 	draw_rect(Rect2(r.position, Vector2(r.size.x, 1.5)),
-		Color(0.30, 0.23, 0.15, 0.55))
+		Color(0.28, 0.20, 0.12, 0.60))
 	draw_rect(Rect2(r.position + Vector2(0, r.size.y - 1.5),
-		Vector2(r.size.x, 1.5)), Color(0.30, 0.23, 0.15, 0.55))
+		Vector2(r.size.x, 1.5)), Color(0.28, 0.20, 0.12, 0.60))
 
 
 func _draw_plaza(vis: Rect2) -> void:
-	var rect: Rect2i = layout["plaza_rect"]
-	if not vis.intersects(rect):
+	var plaza: Dictionary = layout["plaza"]
+	var bounds: Rect2i = layout["plaza_rect"]
+	if not vis.intersects(bounds):
 		return
-	var r: Rect2 = _tile_rect(rect)
-	draw_texture_rect(_cobble_tex, r, true, Color(0.94, 0.90, 0.82))
-	draw_rect(r, Color(0.28, 0.24, 0.18), false, 2.0)
-	# Unregelmaessige Randsteine gegen die Rasterwirkung.
-	for i in 18:
-		var px: float = r.position.x + fmod(float(i) * 37.0, r.size.x)
-		var py: float = r.position.y + (3.0 if i % 2 == 0 else r.size.y - 5.0)
-		draw_rect(Rect2(px, py, 7, 4), Color(0.52, 0.50, 0.43))
+	for t in plaza.keys():
+		var tile: Vector2i = t
+		if not vis.has_point(Vector2(tile)):
+			continue
+		var tint: float = float((tile.x * 7 + tile.y * 13) % 5) * 0.012
+		draw_texture_rect(_cobble_tex,
+			Rect2(Vector2(tile) * TILE, Vector2(TILE, TILE)), true,
+			Color(0.92 - tint, 0.89 - tint, 0.80 - tint))
+	# Randsteine als unregelmaessige Kante statt Slab-Rechteck.
+	for t in plaza.keys():
+		var tile2: Vector2i = t
+		if not vis.has_point(Vector2(tile2)):
+			continue
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1),
+				Vector2i(0, -1)]:
+			if not plaza.has(tile2 + d):
+				var p: Vector2 = Vector2(tile2) * TILE
+				if d.x != 0:
+					var lx: float = p.x + (TILE if d.x > 0 else 0)
+					draw_line(Vector2(lx, p.y), Vector2(lx, p.y + TILE),
+						Color(0.30, 0.26, 0.20), 1.5)
+				else:
+					var ly: float = p.y + (TILE if d.y > 0 else 0)
+					draw_line(Vector2(p.x, ly), Vector2(p.x + TILE, ly),
+						Color(0.30, 0.26, 0.20), 1.5)
+		for i in 2:
+			var px: float = float(tile2.x * TILE) + float((i * 5 + tile2.y) % 10)
+			var py: float = float(tile2.y * TILE) + float((i * 7 + tile2.x) % 10)
+			draw_rect(Rect2(px, py, 4, 3), Color(0.58, 0.56, 0.48, 0.8))
 
 
 func _draw_pond(vis: Rect2) -> void:
@@ -380,14 +473,21 @@ func _draw_fields(vis: Rect2) -> void:
 			continue
 		var r: Rect2 = _tile_rect(rect)
 		var stage: int = int(f["stage"])
-		draw_rect(r, FIELD_COLORS[stage])
+		var soil: Color = FIELD_COLORS[stage]
+		draw_rect(r, soil)
+		# Feuchte/Erde als unregelmaessige Flecken, keine flache Flaeche.
+		for i in 10:
+			var fx: float = r.position.x + 4.0 + fmod(float(i) * 23.0, r.size.x - 8.0)
+			var fy: float = r.position.y + 4.0 + fmod(float(i) * 17.0, r.size.y - 8.0)
+			draw_rect(Rect2(fx, fy, 5, 3),
+				Color(soil.r * 0.82, soil.g * 0.78, soil.b * 0.74, 0.55))
 		# Furchen und Crop-Reihen.
 		var rows: int = rect.size.y * 2
 		for i in rows:
 			var yy: float = r.position.y + float(i) * 8.0 + 2.0
 			if i % 2 == 0:
 				draw_rect(Rect2(r.position.x + 4, yy, r.size.x - 8, 2),
-					Color(0.30, 0.22, 0.13, 0.55))
+					Color(0.28, 0.20, 0.11, 0.55))
 			else:
 				draw_rect(Rect2(r.position.x + 4, yy, r.size.x - 8, 3),
 					CROP_COLORS[stage])
@@ -397,6 +497,9 @@ func _draw_fields(vis: Rect2) -> void:
 				var fy: float = r.position.y + 6.0 + fmod(float(i) * 13.0, r.size.y - 12.0)
 				draw_rect(Rect2(fx, fy, 2, 4), Color(0.80, 0.72, 0.30))
 		draw_rect(r, Color(0.24, 0.18, 0.10), false, 2.0)
+		# Ackerrain: schmaler, warmer Erdstreifen um die Parzelle.
+		draw_rect(Rect2(r.position - Vector2(3, 3), r.size + Vector2(6, 6)),
+			Color(0.35, 0.25, 0.15, 0.35), false, 3.0)
 		if bool(f.get("hedge", false)):
 			_draw_hedge(rect)
 		if bool(f.get("fence", false)):
@@ -436,23 +539,73 @@ func _draw_fence(rect: Rect2i, gap: int) -> void:
 		y += step
 
 
+func _draw_farm_yards(vis: Rect2) -> void:
+	for fs in layout["farmsteads"]:
+		var yard: Rect2i = fs["yard"]
+		if not vis.intersects(yard):
+			continue
+		var r: Rect2 = _tile_rect(yard)
+		draw_texture_rect(_dirt_tex, r, true, Color(0.78, 0.67, 0.51))
+		# Stroh, Pfuetzen und Trittspuren statt einer braunen Flaeche.
+		for i in 6:
+			var sx: float = r.position.x + 6.0 + fmod(float(i) * 23.0,
+				r.size.x - 12.0)
+			var sy: float = r.position.y + 5.0 + fmod(float(i) * 17.0,
+				r.size.y - 10.0)
+			if i % 2 == 0:
+				draw_rect(Rect2(sx, sy, 9, 4), Color(0.72, 0.58, 0.30, 0.75))
+				draw_line(Vector2(sx, sy + 1), Vector2(sx + 9, sy + 1),
+					Color(0.54, 0.40, 0.20, 0.8), 1.0)
+				draw_line(Vector2(sx + 2, sy), Vector2(sx + 4, sy + 4),
+					Color(0.82, 0.70, 0.40, 0.7), 1.0)
+			else:
+				draw_circle(Vector2(sx + 3, sy + 2), 3.0,
+					Color(0.34, 0.28, 0.20, 0.55))
+		draw_rect(r, Color(0.30, 0.22, 0.13, 0.9), false, 2.0)
+		# Hofzaun an den Seiten und mit Durchlass zur Hofzufahrt.
+		var fy: float = r.end.y + 2.0
+		var x: float = r.position.x
+		while x <= r.end.x:
+			if absf(x - (r.position.x + r.size.x * 0.45)) > 9.0:
+				draw_line(Vector2(x, fy), Vector2(x, fy - 7),
+					Color(0.44, 0.31, 0.18), 1.5)
+			x += 9.0
+		draw_line(Vector2(r.position.x, fy - 4), Vector2(r.end.x, fy - 4),
+			Color(0.38, 0.26, 0.14), 1.0)
+		var y: float = r.position.y
+		while y <= r.end.y:
+			draw_line(Vector2(r.position.x - 2, y),
+				Vector2(r.position.x - 8, y), Color(0.44, 0.31, 0.18), 1.2)
+			draw_line(Vector2(r.end.x + 2, y),
+				Vector2(r.end.x + 8, y), Color(0.44, 0.31, 0.18), 1.2)
+			y += 9.0
+
+
 func _draw_orchard(vis: Rect2) -> void:
-	var rect: Rect2i = layout["orchard"]
-	if rect.size.x <= 0 or not vis.intersects(rect):
-		return
-	var r: Rect2 = _tile_rect(rect)
-	draw_rect(r, Color(0.36, 0.44, 0.26, 0.55))
-	_draw_fence(rect, 10)
+	for o in layout["orchards"]:
+		var rect: Rect2i = o["rect"]
+		if not vis.intersects(rect):
+			continue
+		var r: Rect2 = _tile_rect(rect)
+		draw_rect(r, Color(0.34, 0.42, 0.25, 0.55))
+		draw_rect(r, Color(0.26, 0.34, 0.18, 0.65), false, 2.0)
+		_draw_fence(rect, 10)
 
 
 func _draw_objects(vis: Rect2) -> void:
 	var drawables: Array = []
-	for i in layout["houses"].size():
-		var h: Dictionary = layout["houses"][i]
-		var rect: Rect2i = h["rect"]
-		if vis.intersects(rect):
-			drawables.append({"y": float(rect.position.y + rect.size.y) * TILE,
-				"kind": 0, "ref": i})
+	for i in (layout["house_rows"] as Array).size():
+		var row: Dictionary = layout["house_rows"][i]
+		var row_rect: Rect2i = row["rect"]
+		if vis.intersects(row_rect):
+			drawables.append({"y": float(row_rect.position.y
+				+ row_rect.size.y) * TILE, "kind": 5, "ref": i})
+	for i in (layout["farmsteads"] as Array).size():
+		var fs: Dictionary = layout["farmsteads"][i]
+		var fs_rect: Rect2i = fs["rect"]
+		if vis.intersects(fs_rect):
+			drawables.append({"y": float(fs_rect.position.y + 9) * TILE,
+				"kind": 6, "ref": i})
 	for c in layout["civic"]:
 		var rect2: Rect2i = c["rect"]
 		if vis.intersects(rect2):
@@ -478,8 +631,6 @@ func _draw_objects(vis: Rect2) -> void:
 		return float(a["y"]) < float(b["y"]))
 	for d in drawables:
 		match int(d["kind"]):
-			0:
-				_draw_house(layout["houses"][int(d["ref"])])
 			1:
 				_draw_civic(d["ref"])
 			2:
@@ -488,51 +639,90 @@ func _draw_objects(vis: Rect2) -> void:
 				_draw_prop(d["ref"])
 			4:
 				_draw_walker(d["ref"])
+			5:
+				_draw_row(int(d["ref"]))
+			6:
+				_draw_farmstead(int(d["ref"]))
 
 
-func _draw_house(h: Dictionary) -> void:
-	var rect: Rect2i = h["rect"]
-	var r: Rect2 = _tile_rect(rect)
-	var tex: Texture2D = _house_tex.get(int(h["variant"]))
+func _draw_row(ri: int) -> void:
+	var row: Dictionary = layout["house_rows"][ri]
+	var tex: Texture2D = _row_tex.get(ri)
 	if tex == null:
 		return
-	draw_rect(Rect2(r.position + Vector2(5, 6), r.size),
-		Color(0.05, 0.05, 0.04, 0.25))
+	var row_rect: Rect2i = row["rect"]
+	var r: Rect2 = _tile_rect(row_rect)
+	var garden: Rect2i = row["garden"]
+	if garden.size.x > 0:
+		_draw_garden(garden)
+	draw_rect(Rect2(r.position + Vector2(4, 6), Vector2(r.size.x, 8 * TILE)),
+		Color(0.05, 0.05, 0.04, 0.22))
 	draw_texture_rect(tex, r, false)
-	_draw_window_glow(r, rect, night_factor)
-	if bool(h.get("fence", false)):
-		_draw_house_fence(rect, h["door"])
-		var garden: Rect2i = h["garden"]
-		if garden.size.x > 0:
-			_draw_garden(garden)
+	_draw_row_fence(row)
+	for h in row["houses"]:
+		var h_rect: Rect2i = h["rect"]
+		_draw_window_glow(_tile_rect(h_rect), h_rect, night_factor)
 
 
-func _draw_house_fence(rect: Rect2i, door: Vector2i) -> void:
-	var r: Rect2 = _tile_rect(rect)
-	var fy: float = r.end.y + 3.0
-	for i in range(rect.size.x + 1):
-		var x: float = r.position.x + float(i) * TILE
-		if absi(int(door.x) - (rect.position.x + i)) <= 1:
-			continue
-		draw_line(Vector2(x, fy), Vector2(x, fy - 7),
-			Color(0.45, 0.31, 0.17), 1.5)
-	draw_line(Vector2(r.position.x, fy - 4),
-		Vector2(r.end.x, fy - 4), Color(0.38, 0.26, 0.14), 1.0)
+func _draw_row_fence(row: Dictionary) -> void:
+	var garden: Rect2i = row["garden"]
+	if garden.size.x <= 0:
+		return
+	var r: Rect2 = _tile_rect(garden)
+	var fy: float = r.end.y + 1.0
+	var doors: Array = row["doors"]
+	var x: float = r.position.x
+	while x <= r.end.x:
+		var gate: bool = false
+		for door in doors:
+			if absf(x - (float(door.x) + 0.5) * TILE) <= 11.0:
+				gate = true
+		if not gate:
+			draw_line(Vector2(x, fy), Vector2(x, fy - 7),
+				Color(0.45, 0.31, 0.17), 1.5)
+		x += 8.0
+	draw_line(Vector2(r.position.x, fy - 4), Vector2(r.end.x, fy - 4),
+		Color(0.38, 0.26, 0.14), 1.0)
+	for sx in [r.position.x, r.end.x]:
+		draw_line(Vector2(sx, r.position.y), Vector2(sx, fy),
+			Color(0.40, 0.28, 0.15), 1.0)
+
+
+func _draw_farmstead(fi: int) -> void:
+	var fs: Dictionary = layout["farmsteads"][fi]
+	var rect: Rect2i = fs["rect"]
+	var tex: Texture2D = _farm_tex.get(fi)
+	if tex == null:
+		return
+	draw_rect(Rect2(Vector2(rect.position) * TILE + Vector2(5, 6),
+		Vector2(rect.size) * TILE - Vector2(0, 10)), Color(0.05, 0.05, 0.04, 0.20))
+	draw_texture_rect(tex, _tile_rect(rect), false)
+	var h_rect: Rect2i = fs["house_rect"]
+	_draw_window_glow(_tile_rect(h_rect), h_rect, night_factor * 0.8)
+	# Scheunentor-Rahmen als lesbares Farm-Detail.
+	var b_rect: Rect2i = fs["barn_rect"]
+	var br: Rect2 = _tile_rect(b_rect)
+	draw_rect(Rect2(br.position.x + br.size.x * 0.35,
+		br.position.y + br.size.y * 0.62, br.size.x * 0.30,
+		br.size.y * 0.34), Color(0.30, 0.20, 0.12, 0.85), false, 2.0)
 
 
 func _draw_garden(garden: Rect2i) -> void:
 	var r: Rect2 = _tile_rect(garden)
-	draw_rect(r, Color(0.40, 0.30, 0.18))
+	draw_rect(r, Color(0.35, 0.28, 0.18))
 	var rows: int = garden.size.y * 2
 	for i in rows:
 		draw_rect(Rect2(r.position.x + 3,
-			r.position.y + float(i) * 8.0 + 3.0, r.size.x - 6, 2),
-			Color(0.32, 0.44, 0.22))
-	for i in 12:
-		var px: float = r.position.x + 4.0 + fmod(float(i) * 11.0, r.size.x - 8.0)
-		var py: float = r.position.y + 4.0 + fmod(float(i) * 7.0, r.size.y - 8.0)
-		draw_circle(Vector2(px, py), 1.6,
-			Color(0.85, 0.70, 0.30) if i % 2 == 0 else Color(0.72, 0.36, 0.32))
+			r.position.y + float(i) * 8.0 + 3.0, r.size.x - 6, 4),
+			Color(0.30, 0.44, 0.21))
+		draw_rect(Rect2(r.position.x + 3,
+			r.position.y + float(i) * 8.0 + 6.0, r.size.x - 6, 1),
+			Color(0.22, 0.34, 0.15))
+	for i in 16:
+		var px: float = r.position.x + 4.0 + fmod(float(i) * 13.0, r.size.x - 8.0)
+		var py: float = r.position.y + 4.0 + fmod(float(i) * 9.0, r.size.y - 8.0)
+		draw_circle(Vector2(px, py), 2.0,
+			Color(0.46, 0.60, 0.28) if i % 3 != 0 else Color(0.82, 0.64, 0.28))
 	# Gartenzaun an den Seiten.
 	var fy: float = r.end.y + 2.0
 	var x: float = r.position.x
