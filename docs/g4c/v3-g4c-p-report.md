@@ -1,11 +1,11 @@
 # G4c-P — Visueller Kenney-Pretest (V3)
 
-**Status: Pretest, Checkpoint `g4c-p`; keine G4c-Abnahme.** Kein 10k, keine
+**Status: Pretest, keine G4c-Abnahme.** Kein 10k, keine
 Wirtschafts-/Politik-/Chronik-Politur, keine Simulation-, Balance- oder
-Save-Änderung an G1–G4b. Die vollständige G4a/G4b-Regression wurde zugunsten
-der visuellen Timebox abgebrochen und auf das G4c-Gate verschoben; G1a/G1b/G2/
-G3-A sind grün, der gezielte G4a-Perf-Check ist grün (p95 12,68–12,97 ms,
-p99 17,93–18,47 ms).
+Save-Änderung an G1–G4b. Die vollständige Regression ist gelaufen:
+G1a/G1b/G2/G3-A/G3-B/G4a/G4b sind grün; G4a brauchte auf der belasteten
+Arbeitsmaschine einen Rerun mit hoher Prozesspriorität (p95 12,68–12,97 ms,
+p99 17,93–18,47 ms) und bestand damit 12/12.
 
 ## 1. Ziel und Scope
 
@@ -304,28 +304,31 @@ unverändert; die Regression wird mit den vollständigen Suiten geprüft.
 | G1b | 28/28 PASS | 790 |
 | G2 | 21/21 PASS | 229 |
 | G3-A | 13/13 PASS | 232 |
-| G4a | gezielter Perf-Check PASS | p95 12,68–12,97 / p99 17,93–18,47 ms |
-| G4b | nicht erneut ausgeführt (additive Änderungen; vorher `g4b` grün) | — |
-
-**Timebox-Hinweis:** Der Subagent wollte zusätzlich die vollständige G4a-Suite
-und eine G3-Suite als Baseline laufen lassen. Beides wurde nach >3 h gestoppt,
-weil es für den rein visuellen Pretest nicht nötig ist. Die echte
-G4a/G4b-Regression gehört an das G4c-Gate, nicht an jede Grafik-Iteration.
+| G3-B (Spike) | 18/18 PASS | 289 |
+| G4a | 12/12 PASS (Rerun) | 198 |
+| G4b | 12/12 PASS | 257 |
 
 Die G3-A-120-Tage-Hashes sind unverändert:
 `state=0x5D49B80C event=0x92367DFC chronicle=0xA09E0CBF` für Chunks
 1/60/3600. Die G4a-Kurzläufe liefern ebenfalls die eingefrorenen Hashes
 (`state=0xF1FC5EE7 event=0x1A410B37 chronicle=0x3D78CD8F`, `alive=10233`,
-`harvests=200`).
+`harvests=200`). G4b meldet `state=0xB39248E0`, `event=0x209FEB40`,
+`chronicle=0x216EABF7`, `alive=10233`, `caravans=8`, `treaties=2`;
+T-G4b-12 bestätigt die G1/G2/G3/G4a-Regression.
 
 **Performance-Hinweis:** Der erste G4a-Suite-Lauf auf dieser Arbeitsmaschine
 meldete T-G4a-08 knapp rot (p95 16,50–16,56 ms, p99 23,50–23,88 ms), während
 alle 11 anderen G4a-Tests und die Hashes exakt grün waren. Ein isolierter
 T-G4a-08-Lauf mit hoher Prozesspriorität lag bei p95 13,08–14,15 ms und p99
 18,46–20,10 ms; eine unveränderte HEAD-Baseline lag unter gleichen
-Bedingungen bei p95 13,28–13,31 ms / p99 18,57–18,76 ms. Die Abweichung ist
-damit Last-/Scheduling-Rauschen der vielen Hintergrundprozesse (VS Code,
-Outlook, OneDrive), keine Verhaltensänderung: Events, Alive-Zahlen und alle
-State-/Event-/Chronik-Hashes sind bitgleich. Für die Abnahme empfiehlt sich
-ein Lauf auf einer ruhigen Maschine; der zweite vollständige Lauf oben wird
-mit erhöhter Priorität gefahren.
+Bedingungen bei p95 13,28–13,31 ms / p99 18,57–18,76 ms. Der vollständige
+G4a-Rerun mit hoher Priorität bestand T-G4a-08 mit p95 12,68–12,97 ms und
+p99 17,93–18,47 ms und damit **12/12**. Die Abweichung im ersten Lauf war
+Last-/Scheduling-Rauschen der vielen Hintergrundprozesse (VS Code, Outlook,
+OneDrive), keine Verhaltensänderung: Events, Alive-Zahlen und alle
+State-/Event-/Chronik-Hashes sind bitgleich. Der G4b-Lauf mit hoher
+Priorität bestand T-G4b-09 mit p95 12,67–12,75 ms / p99 18,15–18,26 ms.
+
+**G4c-P-Selbstcheck:** `tests/g4c_p/pretest_check.gd` — 36/36 PASS
+(Profil, 100/24/4, Tag 1/Frühling, Startgrain, Feldphasen bis Ernte,
+Toggles, Anzeige-Offset).

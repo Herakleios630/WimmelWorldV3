@@ -126,17 +126,29 @@ func _ready() -> void:
 
 func _ensure_assets() -> void:
 	if _rp_img == null:
-		_rp_img = Image.load_from_file(
-			"res://assets/kenney/roguelike-rpg-pack/roguelikeSheet_transparent.png")
-		_rp_tex = ImageTexture.create_from_image(_rp_img)
+		_rp_tex = load("res://assets/kenney/roguelike-rpg-pack/roguelikeSheet_transparent.png")
+		if _rp_tex != null:
+			_rp_img = _rp_tex.get_image()
+		if _rp_img == null:
+			_rp_img = Image.load_from_file(
+				"res://assets/kenney/roguelike-rpg-pack/roguelikeSheet_transparent.png")
+			_rp_tex = ImageTexture.create_from_image(_rp_img)
 	if _ch_img == null:
-		_ch_img = Image.load_from_file(
-			"res://assets/kenney/roguelike-characters/roguelikeChar_transparent.png")
-		_ch_tex = ImageTexture.create_from_image(_ch_img)
+		_ch_tex = load("res://assets/kenney/roguelike-characters/roguelikeChar_transparent.png")
+		if _ch_tex != null:
+			_ch_img = _ch_tex.get_image()
+		if _ch_img == null:
+			_ch_img = Image.load_from_file(
+				"res://assets/kenney/roguelike-characters/roguelikeChar_transparent.png")
+			_ch_tex = ImageTexture.create_from_image(_ch_img)
 	if _base_img == null:
-		_base_img = Image.load_from_file(
-			"res://assets/kenney/rpg-base/RPGpack_sheet.png")
-		_base_tex = ImageTexture.create_from_image(_base_img)
+		_base_tex = load("res://assets/kenney/rpg-base/RPGpack_sheet.png")
+		if _base_tex != null:
+			_base_img = _base_tex.get_image()
+		if _base_img == null:
+			_base_img = Image.load_from_file(
+				"res://assets/kenney/rpg-base/RPGpack_sheet.png")
+			_base_tex = ImageTexture.create_from_image(_base_img)
 
 
 func set_terrain_mode(mode: int) -> void:
