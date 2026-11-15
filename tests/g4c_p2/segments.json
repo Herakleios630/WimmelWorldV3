@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "tile_px": 16,
+  "meters_per_tile": 1.5,
+  "segments": [
+    {"id": "square_well", "prefab": "square_well_16x16", "footprint": [16, 16], "ports": ["n", "e", "s", "w"], "tags": ["civic", "plaza", "well"], "weight": 1.0, "conditions": {"central": true}},
+    {"id": "road_straight", "prefab": "road_straight_4x2", "footprint": [4, 2], "ports": ["e", "w"], "tags": ["road"], "weight": 3.0, "conditions": {}},
+    {"id": "road_corner", "prefab": "road_corner_4x4", "footprint": [4, 4], "ports": ["n", "e"], "tags": ["road"], "weight": 2.0, "conditions": {}},
+    {"id": "road_t", "prefab": "road_t_4x4", "footprint": [4, 4], "ports": ["n", "e", "w"], "tags": ["road"], "weight": 1.5, "conditions": {}},
+    {"id": "road_cross", "prefab": "road_cross_4x4", "footprint": [4, 4], "ports": ["n", "e", "s", "w"], "tags": ["road"], "weight": 1.0, "conditions": {}},
+    {"id": "house_row", "prefab": "house_row_16x16", "footprint": [16, 16], "ports": ["s"], "tags": ["residential", "house_row"], "weight": 2.0, "conditions": {"road": true, "houses": 3}},
+    {"id": "house_single", "prefab": "house_single_10x10", "footprint": [10, 10], "ports": ["s"], "tags": ["residential", "house"], "weight": 4.0, "conditions": {"road": true, "houses": 1}},
+    {"id": "farmstead", "prefab": "farmstead_16x16", "footprint": [16, 16], "ports": ["s", "e"], "tags": ["farm", "house", "barn", "garden"], "weight": 1.0, "conditions": {"edge": true}},
+    {"id": "workshop", "prefab": "workshop_10x9", "footprint": [10, 9], "ports": ["s"], "tags": ["civic", "work", "storage"], "weight": 1.0, "conditions": {"road": true, "unique": true}},
+    {"id": "granary", "prefab": "granary_7x6", "footprint": [7, 6], "ports": ["s"], "tags": ["civic", "storage", "grain"], "weight": 0.8, "conditions": {"road": true, "unique": true}},
+    {"id": "barn", "prefab": "barn_10x7", "footprint": [10, 7], "ports": ["s"], "tags": ["farm", "storage"], "weight": 0.8, "conditions": {"road": true, "unique": true}},
+    {"id": "field_cluster", "prefab": "field_cluster_10x8", "footprint": [10, 8], "ports": ["n"], "tags": ["field", "crop", "hedge"], "weight": 3.0, "conditions": {"edge": true}},
+    {"id": "pond", "prefab": "pond_28x18", "footprint": [28, 18], "ports": [], "tags": ["water", "shore", "reeds"], "weight": 1.0, "conditions": {"edge": true, "unique": true}},
+    {"id": "orchard", "prefab": "orchard_16x12", "footprint": [16, 12], "ports": ["s"], "tags": ["trees", "garden", "fruit"], "weight": 1.0, "conditions": {"edge": true}},
+    {"id": "garden", "prefab": "garden_6x5", "footprint": [6, 5], "ports": [], "tags": ["garden", "fence", "props"], "weight": 2.0, "conditions": {"house_adjacent": true}},
+    {"id": "trees", "prefab": "trees_4x4", "footprint": [4, 4], "ports": [], "tags": ["decor", "tree"], "weight": 4.0, "conditions": {"free": true}},
+    {"id": "props", "prefab": "props_3x3", "footprint": [3, 3], "ports": [], "tags": ["decor", "barrel", "cart", "bench"], "weight": 3.0, "conditions": {"free": true}}
+  ],
+  "house_variants": [
+    {"id": "h_cream_brown", "size": [6, 6], "wall": "cream", "roof": "warm_brown", "chimney": false, "windows": 2},
+    {"id": "h_brick_ochre", "size": [7, 6], "wall": "brick", "roof": "warm_ochre", "chimney": true, "windows": 2},
+    {"id": "h_stone_slate", "size": [6, 7], "wall": "stone", "roof": "slate", "chimney": true, "windows": 2},
+    {"id": "h_cream_ochre", "size": [8, 7], "wall": "cream", "roof": "warm_ochre", "chimney": true, "windows": 4},
+    {"id": "h_brick_brown", "size": [7, 7], "wall": "brick", "roof": "warm_brown", "chimney": true, "windows": 3},
+    {"id": "h_stone_brown", "size": [8, 8], "wall": "stone", "roof": "warm_brown", "chimney": false, "windows": 4},
+    {"id": "h_cream_slate", "size": [6, 6], "wall": "cream", "roof": "slate", "chimney": true, "windows": 2},
+    {"id": "h_brick_ochre_small", "size": [6, 6], "wall": "brick", "roof": "warm_ochre", "chimney": false, "windows": 2},
+    {"id": "h_stone_ochre", "size": [7, 6], "wall": "stone", "roof": "warm_ochre", "chimney": true, "windows": 2},
+    {"id": "h_cream_brown_large", "size": [8, 7], "wall": "cream", "roof": "warm_brown", "chimney": true, "windows": 4}
+  ]
+}

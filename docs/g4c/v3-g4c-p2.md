@@ -75,6 +75,16 @@ Segmente (jeweils 16×16 Tiles oder Vielfache, mit Ports):
 - Nach jedem Schritt: kurze 100-Agenten-Preview + Screenshots, Feedback des
   Nutzers, dann gezielt nachbessern. Keine 35-Minuten-Suiten.
 
+**Timebox (verbindlich):**
+
+- Max. **25 Minuten** pro P2-Iteration.
+- Kein G1–G4b-/G4a-/G3-Suite-Lauf, kein 10k, kein Baseline-/Perf-Vergleich.
+- Kein einzelner Befehl über **120 Sekunden**; bei Überschreitung abbrechen
+  und mit Screenshots/Blocker zurückmelden.
+- Nur 100-Agenten-Demo + maximal 4 Screenshots + kurzer Report.
+- Bei Timeout: unfertigen Stand + Screenshots liefern; keine stillen
+  Langläufe.
+
 ## 6. Abnahme P2.1
 
 - 100 Agenten, 24 Häuser, 6 Feldparzellen, organisches Dorf.
